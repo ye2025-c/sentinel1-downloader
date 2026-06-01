@@ -64,7 +64,7 @@ def build_auth_tab(app):
         "⑥ 建议使用全局VPN，提升访问 ESA 服务器速度",
     ]
     for h in hints:
-        tk.Label(hint, text=h, fg=C["DIS"], font=("Consolas", 9),
+        tk.Label(hint, text=h, fg=C["DIS"], font=(app.FONT_UI, 9),
                  anchor="w").pack(fill="x", pady=1)
 
     # 登录日志

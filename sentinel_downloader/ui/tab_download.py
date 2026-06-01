@@ -28,7 +28,7 @@ def build_download_tab(app):
     qtb = ttk.Frame(qf)
     qtb.pack(fill="x", pady=(0, 6))
     app.lbl_queue = tk.Label(qtb, text="队列：0 景  |  0.0 GB",
-                             fg=C["ACC"], font=("Consolas", 10, "bold"), bg=C["BG"])
+                             fg=C["ACC"], font=(app.FONT_UI, 10, "bold"), bg=C["BG"])
     app.lbl_queue.pack(side="left")
     ttk.Button(qtb, text="清空队列", command=lambda: _clear_queue(app)).pack(side="right")
     ttk.Button(qtb, text="移除选中", command=lambda: _remove_selected(app)).pack(side="right", padx=4)
@@ -58,7 +58,7 @@ def build_download_tab(app):
     pgf = ttk.Frame(f)
     pgf.pack(fill="x", padx=12, pady=(0, 6))
     app.lbl_prog = tk.Label(pgf, text="当前进度：-", fg=C["DIS"],
-                            font=("Consolas", 9), bg=C["BG"])
+                            font=(app.FONT_UI, 9), bg=C["BG"])
     app.lbl_prog.pack(anchor="w")
     app.prog_bar = ttk.Progressbar(pgf, mode="determinate", length=100)
     app.prog_bar.pack(fill="x", pady=(3, 0))
@@ -74,15 +74,15 @@ def build_download_tab(app):
     app.btn_stop.pack(side="left", padx=(0, 16))
 
     # 并行数选择
-    tk.Label(cbf, text="并行：", fg=C["DIS"], font=("Consolas", 9), bg=C["BG"]).pack(side="left")
+    tk.Label(cbf, text="并行：", fg=C["DIS"], font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
     app.cmb_parallel = ttk.Combobox(cbf, values=["1", "2", "3", "4", "5"],
-                                    state="readonly", width=3, font=("Consolas", 9))
+                                    state="readonly", width=3, font=(app.FONT_UI, 9))
     app.cmb_parallel.set("3")
     app.cmb_parallel.pack(side="left")
-    tk.Label(cbf, text=" 景", fg=C["DIS"], font=("Consolas", 9), bg=C["BG"]).pack(side="left")
+    tk.Label(cbf, text=" 景", fg=C["DIS"], font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
 
     app.lbl_speed = tk.Label(cbf, text="", fg=C["ORG"],
-                             font=("Consolas", 9), bg=C["BG"])
+                             font=(app.FONT_UI, 9), bg=C["BG"])
     app.lbl_speed.pack(side="right")
 
     # 下载日志
@@ -97,7 +97,7 @@ def build_download_tab(app):
     app.dl_log.tag_config("err",  foreground=C["RED"])
     app.dl_log.tag_config("warn", foreground=C["ORG"])
     app.dl_log.tag_config("info", foreground=C["ACC"])
-    app.dl_log.tag_config("head", foreground="#ffffff", font=("Consolas", 9, "bold"))
+    app.dl_log.tag_config("head", foreground=C["FG"], font=("Consolas", 9, "bold"))
 
     app._stop_event = threading.Event()
 

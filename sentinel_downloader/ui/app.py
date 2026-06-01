@@ -15,20 +15,35 @@ import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 
+import ttkbootstrap as ttkb
+
 from core.api import CopernicusAPI
 from core.config import log_line
 from ui.tab_auth import build_auth_tab, load_config_into_ui
 from ui.tab_search import build_search_tab
 from ui.tab_download import build_download_tab
 
+# 主题：ttkbootstrap 自带的深色主题，换一个单词即可切换风格
+#   深色可选：superhero / darkly / cyborg / solar / vapor
+#   浅色可选：cosmo / flatly / litera / yeti / minty ...
+THEME = "superhero"
 
-class App(tk.Tk):
+
+def _darken(hexcolor, f=0.82):
+    """把十六进制颜色按比例压暗，用于按钮 hover 态（保持色相）。"""
+    h = hexcolor.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return "#%02x%02x%02x" % (int(r * f), int(g * f), int(b * f))
+
+
+class App(ttkb.Window):
     def __init__(self):
-        super().__init__()
-        self.title("Sentinel-1 批量下载工具  |  海河25·7洪涝监测")
-        self.geometry("1050x760")
+        super().__init__(
+            title="Sentinel-1 批量下载工具  |  海河25·7洪涝监测",
+            themename=THEME,
+            size=(1050, 760),
+        )
         self.minsize(900, 650)
-        self.configure(bg="#0d1117")
         self.resizable(True, True)
 
         # ── 共享状态（各 Tab 通过 app.xxx 访问）──────────────────────
@@ -46,78 +61,102 @@ class App(tk.Tk):
 
     # ── 样式 ──────────────────────────────────
     def _setup_style(self):
-        style = ttk.Style(self)
-        style.theme_use("clam")
+        # ttkbootstrap 已套用整套主题（按钮 / 输入框 / 表格 / 标签页等 ttk
+        # 控件自动变好看）。这里只做三件事：
+        #   ① 把主题色映射到同名变量，供下方 option 数据库与 self.colors 复用；
+        #   ② 界面字体换中文友好的雅黑，数据表 / 日志保留等宽；
+        #   ③ 次级按钮转中性灰，并定义蓝 / 绿强调按钮与进度条配色。
+        style = self.style
+        c = style.colors
 
-        BG   = "#0d1117"
-        BG2  = "#161b22"
-        BG3  = "#1f2937"
-        FG   = "#e6edf3"
-        ACC  = "#00d4ff"
-        GRN  = "#3fb950"
-        BDR  = "#30363d"
-        SEL  = "#1f3547"
-        DIS  = "#484f58"
+        UI   = "Microsoft YaHei UI"   # 界面文字（中文友好、非等宽）
+        MONO = "Consolas"             # 日志 / 数据表（等宽对齐）
+        self.FONT_UI   = UI
+        self.FONT_MONO = MONO
 
-        style.configure(".",           background=BG,  foreground=FG,  font=("Consolas", 10))
-        style.configure("TFrame",      background=BG)
-        style.configure("TLabel",      background=BG,  foreground=FG,  font=("Consolas", 10))
-        style.configure("TLabelframe", background=BG,  foreground=ACC, font=("Consolas", 10, "bold"))
-        style.configure("TLabelframe.Label", background=BG, foreground=ACC, font=("Consolas", 10, "bold"))
-        style.configure("TEntry",      fieldbackground=BG2, foreground=FG,  insertcolor=FG,
-                         font=("Consolas", 10), borderwidth=1, relief="flat")
-        style.configure("TCombobox",   fieldbackground=BG2, foreground=FG,
-                         selectbackground=SEL, font=("Consolas", 10))
-        style.map("TCombobox",         fieldbackground=[("readonly", BG2)])
-        style.configure("TButton",     background=BG3, foreground=FG, borderwidth=0,
-                         padding=(10, 6), font=("Consolas", 10, "bold"), relief="flat")
+        BG   = c.bg          # 主背景
+        BG2  = c.inputbg     # 输入框 / 日志 / 表格行
+        BG3  = c.dark        # 顶栏 / 状态栏（深一档）
+        BG4  = c.secondary   # 次级按钮 / 悬停
+        ALT  = c.bg          # 表格隔行色（与 inputbg 形成细微差）
+        FG   = c.fg
+        ACC  = c.primary     # 强调蓝
+        GRN  = c.success
+        RED  = c.danger
+        ORG  = c.warning
+        BDR  = c.border
+        SEL  = c.selectbg    # 选中行
+        DIS  = c.light       # 次要 / 提示文字
+
+        # ① 字体：界面雅黑，数据表 / 日志等宽
+        style.configure(".",                 font=(UI, 10))
+        style.configure("TLabel",            font=(UI, 10))
+        style.configure("TButton",           font=(UI, 10))
+        style.configure("TCheckbutton",      font=(UI, 10))
+        style.configure("TRadiobutton",      font=(UI, 10))
+        style.configure("TEntry",            font=(UI, 10))
+        style.configure("TCombobox",         font=(UI, 10))
+        style.configure("TNotebook.Tab",     font=(UI, 10), padding=(16, 8))
+        style.configure("TLabelframe.Label", font=(UI, 10, "bold"), foreground=ACC)
+        style.configure("Treeview",          font=(MONO, 9), rowheight=27)
+        style.configure("Treeview.Heading",  font=(UI, 9, "bold"))
+
+        # ② 次级按钮中性灰（ttkbootstrap 默认按钮为实心蓝，留给主操作用）
+        style.configure("TButton", background=BG4, bordercolor=BG4)
         style.map("TButton",
-                  background=[("active", "#2d3748"), ("disabled", BG2)],
+                  background=[("active", _darken(BG4)), ("disabled", BG2)],
                   foreground=[("disabled", DIS)])
-        style.configure("Accent.TButton", background=ACC,  foreground="#000000",
-                         font=("Consolas", 10, "bold"))
-        style.map("Accent.TButton",    background=[("active", "#00b8d9")])
-        style.configure("Green.TButton",  background=GRN,  foreground="#000000",
-                         font=("Consolas", 10, "bold"))
-        style.map("Green.TButton",     background=[("active", "#2ea043")])
-        style.configure("TCheckbutton", background=BG, foreground=FG,
-                         font=("Consolas", 10))
-        style.map("TCheckbutton",      background=[("active", BG)])
-        style.configure("TNotebook",   background=BG,  borderwidth=0)
-        style.configure("TNotebook.Tab", background=BG2, foreground=DIS,
-                         padding=(14, 7), font=("Consolas", 10))
-        style.map("TNotebook.Tab",
-                  background=[("selected", BG), ("active", BG3)],
-                  foreground=[("selected", ACC), ("active", FG)])
-        style.configure("Treeview",    background=BG2, foreground=FG,
-                         fieldbackground=BG2, rowheight=26,
-                         font=("Consolas", 9), borderwidth=0)
-        style.configure("Treeview.Heading", background=BG3, foreground=ACC,
-                         font=("Consolas", 9, "bold"), relief="flat")
-        style.map("Treeview",          background=[("selected", SEL)])
-        style.configure("TScrollbar",  background=BG3, troughcolor=BG2,
-                         arrowcolor=DIS, borderwidth=0)
-        style.configure("TProgressbar", troughcolor=BG3, background=ACC, borderwidth=0)
-        style.configure("Green.Horizontal.TProgressbar",
-                         troughcolor=BG3, background=GRN, borderwidth=0)
 
-        self.colors = dict(BG=BG, BG2=BG2, BG3=BG3, FG=FG, ACC=ACC,
+        # ③ 蓝 / 绿强调按钮（沿用 tab 中的 style 名）
+        style.configure("Accent.TButton", font=(UI, 10, "bold"),
+                        background=ACC, bordercolor=ACC, foreground=c.selectfg)
+        style.map("Accent.TButton",
+                  background=[("active", _darken(ACC)), ("disabled", BG2)],
+                  foreground=[("disabled", DIS)])
+        style.configure("Green.TButton", font=(UI, 10, "bold"),
+                        background=GRN, bordercolor=GRN, foreground=c.selectfg)
+        style.map("Green.TButton",
+                  background=[("active", _darken(GRN)), ("disabled", BG2)],
+                  foreground=[("disabled", DIS)])
+
+        # 进度条加粗 + 绿色变体
+        style.configure("TProgressbar", thickness=14)
+        style.configure("Green.Horizontal.TProgressbar", background=GRN, thickness=14)
+
+        # tk（非 ttk）控件无法走 style：用 option 数据库给未显式着色的
+        # Label / Radiobutton 设默认深色底，并把下拉框弹窗也调成深色。
+        self.option_add("*Label.background", BG)
+        self.option_add("*Label.foreground", FG)
+        self.option_add("*Radiobutton.background", BG)
+        self.option_add("*Radiobutton.foreground", FG)
+        self.option_add("*Radiobutton.selectColor", BG2)
+        self.option_add("*Radiobutton.activeBackground", BG)
+        self.option_add("*Radiobutton.activeForeground", ACC)
+        self.option_add("*TCombobox*Listbox.background", BG2)
+        self.option_add("*TCombobox*Listbox.foreground", FG)
+        self.option_add("*TCombobox*Listbox.selectBackground", SEL)
+        self.option_add("*TCombobox*Listbox.selectForeground", FG)
+        self.option_add("*TCombobox*Listbox.font", "{Microsoft YaHei UI} 9")
+
+        self.colors = dict(BG=BG, BG2=BG2, BG3=BG3, BG4=BG4, ALT=ALT, FG=FG, ACC=ACC,
                            GRN=GRN, BDR=BDR, SEL=SEL, DIS=DIS,
-                           RED="#f85149", ORG="#d29922")
+                           RED=RED, ORG=ORG)
 
     # ── 整体框架 ──────────────────────────────
     def _build_ui(self):
         C = self.colors
+        UI = self.FONT_UI
         # 顶栏
         top = tk.Frame(self, bg=C["BG3"], height=52)
         top.pack(fill="x")
         top.pack_propagate(False)
         tk.Label(top, text="🛰  Sentinel-1 批量下载工具",
                  bg=C["BG3"], fg=C["ACC"],
-                 font=("Consolas", 14, "bold")).pack(side="left", padx=18, pady=12)
+                 font=(UI, 14, "bold")).pack(side="left", padx=18, pady=12)
         self.lbl_token = tk.Label(top, text="● 未登录", bg=C["BG3"], fg=C["DIS"],
-                                  font=("Consolas", 10))
+                                  font=(UI, 10))
         self.lbl_token.pack(side="right", padx=18)
+        tk.Frame(self, bg=C["BDR"], height=1).pack(fill="x")   # 顶栏分隔线
 
         # Notebook
         nb = ttk.Notebook(self)
@@ -140,8 +179,10 @@ class App(tk.Tk):
         sb = tk.Frame(self, bg=C["BG3"], height=28)
         sb.pack(fill="x", side="bottom")
         sb.pack_propagate(False)
+        # 分隔线在状态栏之上（后于状态栏 pack 到底部，故位于其上方）
+        tk.Frame(self, bg=C["BDR"], height=1).pack(fill="x", side="bottom")
         tk.Label(sb, textvariable=self.status_var, bg=C["BG3"], fg=C["DIS"],
-                 font=("Consolas", 9), anchor="w").pack(side="left", padx=12, pady=4)
+                 font=(UI, 9), anchor="w").pack(side="left", padx=12, pady=4)
 
     # ── 跨 Tab 共享工具 ───────────────────────
     def _log(self, widget, msg, tag="info"):

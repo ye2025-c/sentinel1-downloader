@@ -74,14 +74,14 @@ def build_search_tab(app):
         rb = tk.Radiobutton(abox, text=name, variable=app.aoi_var, value=name,
                             bg=C["BG"], fg=C["FG"], selectcolor=C["BG2"],
                             activebackground=C["BG"], activeforeground=C["ACC"],
-                            font=("Consolas", 9), command=lambda: _aoi_changed(app))
+                            font=(app.FONT_UI, 9), command=lambda: _aoi_changed(app))
         rb.pack(anchor="w")
     tk.Radiobutton(abox, text="自定义 WKT", variable=app.aoi_var, value="custom",
                    bg=C["BG"], fg=C["FG"], selectcolor=C["BG2"],
                    activebackground=C["BG"], activeforeground=C["ACC"],
-                   font=("Consolas", 9), command=lambda: _aoi_changed(app)).pack(anchor="w")
+                   font=(app.FONT_UI, 9), command=lambda: _aoi_changed(app)).pack(anchor="w")
     app.ent_wkt = tk.Text(abox, height=3, bg=C["BG2"], fg=C["FG"],
-                          font=("Consolas", 8), insertbackground=C["FG"],
+                          font=(app.FONT_MONO, 8), insertbackground=C["FG"],
                           relief="flat", wrap="word")
     app.ent_wkt.pack(fill="x", pady=(4, 0))
     _aoi_changed(app)
@@ -90,13 +90,13 @@ def build_search_tab(app):
     pbox = ttk.LabelFrame(left, text=" 产品参数 ", padding=10)
     pbox.pack(fill="x", pady=(0, 8))
 
-    tk.Label(pbox, text="产品类型：", font=("Consolas", 9)).pack(anchor="w")
+    tk.Label(pbox, text="产品类型：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_type = ttk.Combobox(pbox, values=list(PRODUCT_TYPES.keys()),
-                                state="readonly", font=("Consolas", 9))
+                                state="readonly", font=(app.FONT_UI, 9))
     app.cmb_type.current(0)
     app.cmb_type.pack(fill="x", pady=(2, 8))
 
-    tk.Label(pbox, text="卫星平台：", font=("Consolas", 9)).pack(anchor="w")
+    tk.Label(pbox, text="卫星平台：", font=(app.FONT_UI, 9)).pack(anchor="w")
     pf2 = ttk.Frame(pbox)
     pf2.pack(anchor="w", pady=(2, 8))
     app.var_s1a = tk.BooleanVar(value=True)
@@ -107,41 +107,41 @@ def build_search_tab(app):
     ttk.Checkbutton(pf2, text="S1C", variable=app.var_s1c).pack(side="left")
 
     # ── 轨道方向（服务端过滤）────────────────────────────────
-    tk.Label(pbox, text="轨道方向：", font=("Consolas", 9)).pack(anchor="w")
+    tk.Label(pbox, text="轨道方向：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_orbit = ttk.Combobox(
         pbox,
         values=["不限", "升轨 ASCENDING", "降轨 DESCENDING"],
-        state="readonly", font=("Consolas", 9))
+        state="readonly", font=(app.FONT_UI, 9))
     app.cmb_orbit.current(0)
     app.cmb_orbit.pack(fill="x", pady=(2, 8))
 
     # ── 极化方式（服务端过滤）────────────────────────────────
-    tk.Label(pbox, text="极化方式：", font=("Consolas", 9)).pack(anchor="w")
+    tk.Label(pbox, text="极化方式：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_pol = ttk.Combobox(
         pbox,
         values=["不限", "VV&VH（双极化）", "VV（单极化）",
                 "VH（单极化）", "HH&HV（双极化）", "HH（单极化）"],
-        state="readonly", font=("Consolas", 9))
+        state="readonly", font=(app.FONT_UI, 9))
     app.cmb_pol.current(0)
     app.cmb_pol.pack(fill="x", pady=(2, 8))
 
     # ── 相对轨道号（服务端过滤，留空=不限）──────────────────
-    tk.Label(pbox, text="相对轨道号（留空=不限）：", font=("Consolas", 9)).pack(anchor="w")
-    app.ent_orbit_num = ttk.Entry(pbox, width=10, font=("Consolas", 9))
+    tk.Label(pbox, text="相对轨道号（留空=不限）：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.ent_orbit_num = ttk.Entry(pbox, width=10, font=(app.FONT_UI, 9))
     app.ent_orbit_num.pack(anchor="w", pady=(2, 8))
 
     # ── 成像模式（服务端过滤）────────────────────────────────
-    tk.Label(pbox, text="成像模式：", font=("Consolas", 9)).pack(anchor="w")
+    tk.Label(pbox, text="成像模式：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_mode = ttk.Combobox(
         pbox,
         values=["不限", "IW（干涉宽幅，推荐）", "EW（超宽幅）", "SM（条带）", "WV（波浪）"],
-        state="readonly", font=("Consolas", 9))
+        state="readonly", font=(app.FONT_UI, 9))
     app.cmb_mode.current(0)
     app.cmb_mode.pack(fill="x", pady=(2, 8))
 
     # ── 绝对轨道号（服务端过滤，逗号分隔多个，留空=不限）─────
-    tk.Label(pbox, text="绝对轨道号（逗号分隔，留空=不限）：", font=("Consolas", 9)).pack(anchor="w")
-    app.ent_abs_orbit = ttk.Entry(pbox, width=20, font=("Consolas", 9))
+    tk.Label(pbox, text="绝对轨道号（逗号分隔，留空=不限）：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.ent_abs_orbit = ttk.Entry(pbox, width=20, font=(app.FONT_UI, 9))
     app.ent_abs_orbit.pack(anchor="w", pady=(2, 8))
 
     # ── 仅在线产品（服务端过滤）──────────────────────────────
@@ -149,9 +149,9 @@ def build_search_tab(app):
     ttk.Checkbutton(pbox, text="仅显示在线产品（跳过归档）",
                     variable=app.var_online).pack(anchor="w", pady=(0, 8))
 
-    tk.Label(pbox, text="最大返回数：", font=("Consolas", 9)).pack(anchor="w")
+    tk.Label(pbox, text="最大返回数：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_max = ttk.Combobox(pbox, values=["20", "50", "100", "200"],
-                               state="readonly", width=8, font=("Consolas", 9))
+                               state="readonly", width=8, font=(app.FONT_UI, 9))
     app.cmb_max.set("50")
     app.cmb_max.pack(anchor="w", pady=(2, 0))
 
@@ -171,7 +171,7 @@ def build_search_tab(app):
 
     tk.Label(nsf,
              text="支持多个名称（换行或逗号分隔），带不带 .SAFE 均可",
-             fg=C["DIS"], font=("Consolas", 8), bg=C["BG"]).pack(anchor="w")
+             fg=C["DIS"], font=(app.FONT_UI, 8), bg=C["BG"]).pack(anchor="w")
 
     ns_row = ttk.Frame(nsf)
     ns_row.pack(fill="x", pady=(4, 0))
@@ -179,7 +179,7 @@ def build_search_tab(app):
     app.ent_name_search = tk.Text(
         ns_row, height=3,
         bg=C["BG2"], fg=C["FG"],
-        font=("Consolas", 9),
+        font=(app.FONT_MONO, 9),
         insertbackground=C["FG"],
         relief="flat", wrap="word"
     )
@@ -197,7 +197,7 @@ def build_search_tab(app):
     rtb = ttk.Frame(right)
     rtb.pack(fill="x", pady=(0, 6))
     app.lbl_count = tk.Label(rtb, text="搜索结果：0 景", fg=C["ACC"],
-                             font=("Consolas", 10, "bold"), bg=C["BG"])
+                             font=(app.FONT_UI, 10, "bold"), bg=C["BG"])
     app.lbl_count.pack(side="left")
     ttk.Button(rtb, text="全选", command=lambda: _select_all(app)).pack(side="right", padx=4)
     ttk.Button(rtb, text="全不选", command=lambda: _deselect_all(app)).pack(side="right", padx=4)
@@ -209,13 +209,13 @@ def build_search_tab(app):
     # 客户端高级筛选：对已检索结果实时子串过滤，不重新请求服务器
     ftb = ttk.Frame(right)
     ftb.pack(fill="x", pady=(0, 6))
-    tk.Label(ftb, text="🔎 筛选：", fg=C["DIS"], font=("Consolas", 9),
+    tk.Label(ftb, text="🔎 筛选：", fg=C["DIS"], font=(app.FONT_UI, 9),
              bg=C["BG"]).pack(side="left")
     app.filter_var = tk.StringVar()
-    ttk.Entry(ftb, textvariable=app.filter_var, font=("Consolas", 9)
+    ttk.Entry(ftb, textvariable=app.filter_var, font=(app.FONT_UI, 9)
               ).pack(side="left", fill="x", expand=True)
     tk.Label(ftb, text=" 名称/平台/模式/极化/轨道", fg=C["DIS"],
-             font=("Consolas", 8), bg=C["BG"]).pack(side="left", padx=(6, 0))
+             font=(app.FONT_UI, 8), bg=C["BG"]).pack(side="left", padx=(6, 0))
     ttk.Button(ftb, text="清除",
                command=lambda: app.filter_var.set("")).pack(side="right", padx=4)
     # 输入即过滤（结果已在内存，纯客户端，无网络请求）
@@ -253,7 +253,7 @@ def build_search_tab(app):
     app.tree.column("size",      width=65,  anchor="center", stretch=False)
     app.tree.column("online",    width=65,  anchor="center", stretch=False)
     app.tree.tag_configure("even", background=C["BG2"])
-    app.tree.tag_configure("odd",  background="#13181f")
+    app.tree.tag_configure("odd",  background=C["ALT"])
     app.tree.tag_configure("sel",  background=C["SEL"])
     app.tree.bind("<Button-1>", lambda e: _tree_click(app, e))
 
@@ -266,7 +266,7 @@ def build_search_tab(app):
 
     # 统计面板（表格下方一行）
     app.lbl_stats = tk.Label(right, text="", fg=C["DIS"],
-                             font=("Consolas", 9), bg=C["BG"], anchor="w")
+                             font=(app.FONT_UI, 9), bg=C["BG"], anchor="w")
     app.lbl_stats.pack(fill="x", pady=(4, 0))
 
     app._selected_iids = set()   # 已勾选行

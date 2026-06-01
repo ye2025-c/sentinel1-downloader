@@ -28,6 +28,11 @@ def download(api, product_id, product_name, save_dir,
     4. ConnectionResetError 单独捕获，不刷新 Token（Token 未过期，刷新无意义）
     5. 所有异常重试时都正确利用断点续传（已有文件不删除）
     6. iter_content chunk_size 从 64KB 提升到 1MB，减少单次传输次数
+    7. requests.exceptions.ConnectionError / ChunkedEncodingError / Timeout
+       并非内置 ConnectionError 子类，必须显式归入「续传不刷 Token」分支，
+       否则连接中断会被误当作 Token 问题，白白刷新并丢失退避节奏
+    8. 续传守卫：请求了 Range 却返回 200（服务器忽略续传、从头发整文件）时，
+       重置为覆盖写，避免把完整文件追加到已有数据后导致损坏
 
     返回 (success: bool, save_path: str | None)
     """
@@ -89,6 +94,16 @@ def download(api, product_id, product_name, save_dir,
                     return True, save_path
 
             resp.raise_for_status()
+
+            # ── 续传守卫：请求了 Range 却返回 200（而非 206）─────────────
+            # 说明服务器忽略了 Range，正在从第 0 字节发送完整文件。
+            # 若此时仍以 "ab" 追加，会把完整文件接在已有数据之后导致损坏，
+            # 必须重置为从头覆盖写。
+            if existing and resp.status_code == 200:
+                if log_cb:
+                    log_cb("  ⚠️ 服务器忽略续传请求（返回 200），从头重新下载", "warn")
+                existing = 0
+
             total      = int(resp.headers.get("content-length", 0)) + existing
             mode       = "ab" if existing else "wb"
             downloaded = existing
@@ -129,11 +144,19 @@ def download(api, product_id, product_name, save_dir,
             if speed_cb: speed_cb(0)            # 完成后清零速度显示
             return True, save_path
 
-        except (ConnectionResetError, ConnectionError) as e:
-            # ── 连接被服务器重置：Token 没过期，不刷新；直接利用断点续传重试 ──
+        except (ConnectionResetError,
+                ConnectionError,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.ChunkedEncodingError,
+                requests.exceptions.Timeout) as e:
+            # ── 连接层中断：服务器重置(10054) / 分块传输中断 / 读超时 ──────
+            # 这类错误 Token 并未过期，刷新无意义；只需保留已下载部分、
+            # 退避后断点续传重试。
+            # 注意：requests.exceptions.ConnectionError 等并非内置 ConnectionError
+            # 的子类，必须显式列出，否则会漏到下面的 Token 刷新分支。
             done_mb = os.path.getsize(save_path) / 1024**2 if os.path.exists(save_path) else 0
             if log_cb:
-                log_cb(f"  ⚠️ 第{attempt}次连接中断（服务器重置），"
+                log_cb(f"  ⚠️ 第{attempt}次连接中断（{type(e).__name__}），"
                        f"已下载 {done_mb:.1f} MB 保留", "warn")
             if attempt < max_retry:
                 wait = min(10 * (2 ** (attempt - 1)), 120)   # 10s, 20s, 40s, 80s, 上限120s
@@ -142,7 +165,7 @@ def download(api, product_id, product_name, save_dir,
             # 不刷新 Token，直接下一轮 attempt，利用已有文件断点续传
 
         except Exception as e:
-            # ── 其他异常（Token 过期、网络超时等）：刷新 Token 再重试 ──
+            # ── 其他异常（Token 过期 401、服务端 5xx 等）：刷新 Token 再重试 ──
             if log_cb: log_cb(f"  ⚠️ 第{attempt}次失败: {e}", "warn")
             if attempt < max_retry:
                 wait = min(10 * attempt, 60)

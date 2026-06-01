@@ -5,3 +5,8 @@ dist/
 build/
 *.spec.bak
 .env
+
+# 本地数据（账号/路径/日志/缓存，不上传；保留 data/ 目录骨架）
+data/config.json
+data/logs/
+data/*.db

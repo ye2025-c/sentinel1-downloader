@@ -13,6 +13,7 @@ import threading
 import requests
 
 from core.config import TOKEN_URL, SEARCH_URL
+from core.models import Product
 
 
 class CopernicusAPI:
@@ -79,7 +80,7 @@ class CopernicusAPI:
                     if hits:
                         results.extend(hits)
                         break   # 找到了就不用试另一种格式
-            return results
+            return [Product.from_odata(p) for p in results]
 
         def _str_attr(name, value):
             return (f"Attributes/OData.CSC.StringAttribute/any("
@@ -145,4 +146,4 @@ class CopernicusAPI:
             products = [p for p in products
                         if any(p.get("Name", "").startswith(pl) for pl in platforms)]
 
-        return products
+        return [Product.from_odata(p) for p in products]

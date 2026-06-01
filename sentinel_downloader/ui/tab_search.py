@@ -7,9 +7,11 @@
 勾选管理、加入下载队列等回调。
 """
 
+import csv
 import threading
 import tkinter as tk
-from tkinter import ttk, messagebox
+from datetime import datetime
+from tkinter import ttk, messagebox, filedialog
 
 from core.config import AOI_PRESETS, PRODUCT_TYPES
 from ui.tab_download import render_queue
@@ -199,8 +201,25 @@ def build_search_tab(app):
     app.lbl_count.pack(side="left")
     ttk.Button(rtb, text="全选", command=lambda: _select_all(app)).pack(side="right", padx=4)
     ttk.Button(rtb, text="全不选", command=lambda: _deselect_all(app)).pack(side="right", padx=4)
+    ttk.Button(rtb, text="📄 导出 CSV",
+               command=lambda: _export_csv(app)).pack(side="right", padx=4)
     ttk.Button(rtb, text="+ 加入下载队列", style="Green.TButton",
                command=lambda: _add_to_queue(app)).pack(side="right", padx=(0, 8))
+
+    # 客户端高级筛选：对已检索结果实时子串过滤，不重新请求服务器
+    ftb = ttk.Frame(right)
+    ftb.pack(fill="x", pady=(0, 6))
+    tk.Label(ftb, text="🔎 筛选：", fg=C["DIS"], font=("Consolas", 9),
+             bg=C["BG"]).pack(side="left")
+    app.filter_var = tk.StringVar()
+    ttk.Entry(ftb, textvariable=app.filter_var, font=("Consolas", 9)
+              ).pack(side="left", fill="x", expand=True)
+    tk.Label(ftb, text=" 名称/平台/模式/极化/轨道", fg=C["DIS"],
+             font=("Consolas", 8), bg=C["BG"]).pack(side="left", padx=(6, 0))
+    ttk.Button(ftb, text="清除",
+               command=lambda: app.filter_var.set("")).pack(side="right", padx=4)
+    # 输入即过滤（结果已在内存，纯客户端，无网络请求）
+    app.filter_var.trace_add("write", lambda *a: render_results(app))
 
     # 结果 Treeview（横向可滚动）
     cols = ("sel", "name", "date", "platform", "mode", "pol", "orbit_dir",
@@ -423,101 +442,140 @@ def _do_name_search(app):
     threading.Thread(target=_run, daemon=True).start()
 
 
+def _product_haystack(p):
+    """把 Product 的可检索字段拼成一个小写串，供客户端筛选做子串匹配。"""
+    return " ".join([
+        p.name, p.platform, p.mode, p.polarization,
+        p.orbit_direction, p.relative_orbit, p.absolute_orbit,
+        p.acquisition_time,
+    ]).lower()
+
+
+def _filtered_products(app):
+    """按筛选框关键字过滤 app.search_results，返回当前应展示的 Product 列表。"""
+    kw = app.filter_var.get().strip().lower() if hasattr(app, "filter_var") else ""
+    if not kw:
+        return list(app.search_results)
+    return [p for p in app.search_results if kw in _product_haystack(p)]
+
+
 def render_results(app):
     for iid in app.tree.get_children():
         app.tree.delete(iid)
     app._selected_iids.clear()
 
+    # 客户端筛选后的展示集；勾选 / 加队列 / CSV 均以此为准
+    displayed = _filtered_products(app)
+    app._displayed = displayed
+
     queue_ids = {q["id"] for q in app.queue}
 
-    # ── 统计计数器 ──────────────────────────────────────────────────
+    # ── 统计计数器（针对当前展示集）────────────────────────────────
     stat_plat  = {}   # {"S1A": n, ...}
     stat_orbit = {}   # {"ASC": n, "DESC": n}
     stat_pol   = {}   # {"VV&VH": n, ...}
     stat_mode  = {}   # {"IW": n, ...}
 
-    for i, p in enumerate(app.search_results):
-        name = p.get("Name", p.get("Id", "—"))
-        date = p.get("ContentDate", {}).get("Start", "")[:16].replace("T", " ")
-
-        # 平台
-        if   name.startswith("S1A"): plat = "S1A"
-        elif name.startswith("S1C"): plat = "S1C"
-        else:                         plat = "S1B"
-
-        # 从 Attributes 提取各字段
-        attrs = {a["Name"]: a.get("Value", "—")
-                 for a in p.get("Attributes", []) if "Name" in a}
-
-        pol       = attrs.get("polarisationChannels", "—")
-        orbit_dir = attrs.get("orbitDirection", "—")
-        rel_orbit = str(attrs.get("relativeOrbitNumber", "—"))
-        abs_orbit = str(attrs.get("absoluteOrbitNumber", "—"))
-        mode      = attrs.get("operationalMode", "—")
-
-        # 极化退回推断
-        if pol == "—":
-            pol = "VV&VH" if "DV" in name else ("HH&HV" if "DH" in name else "—")
-
-        # 轨道方向简写
-        orbit_short = {"ASCENDING": "ASC", "DESCENDING": "DESC"}.get(orbit_dir, orbit_dir)
-
-        size   = f"{p.get('ContentLength', 1700*1024*1024)/1024**3:.1f}GB"
-        online = "✓在线" if p.get("Online", True) else "归档"
-        inq    = " ★" if p["Id"] in queue_ids else ""
-        tag    = "even" if i % 2 == 0 else "odd"
+    for i, p in enumerate(displayed):
+        inq = " ★" if p.product_id in queue_ids else ""
+        tag = "even" if i % 2 == 0 else "odd"
 
         app.tree.insert("", "end", iid=str(i),
-                        values=("", name, date + " UTC", plat, mode, pol,
-                                orbit_short, rel_orbit, abs_orbit,
-                                size, online + inq),
+                        values=("", p.name, p.acquisition_time + " UTC",
+                                p.platform, p.mode, p.polarization,
+                                p.orbit_direction, p.relative_orbit, p.absolute_orbit,
+                                f"{p.size_gb:.1f}GB", p.online_str + inq),
                         tags=(tag,))
 
         # 累计统计
-        stat_plat[plat]         = stat_plat.get(plat, 0) + 1
-        stat_orbit[orbit_short] = stat_orbit.get(orbit_short, 0) + 1
-        stat_pol[pol]           = stat_pol.get(pol, 0) + 1
-        stat_mode[mode]         = stat_mode.get(mode, 0) + 1
+        stat_plat[p.platform]        = stat_plat.get(p.platform, 0) + 1
+        stat_orbit[p.orbit_direction]= stat_orbit.get(p.orbit_direction, 0) + 1
+        stat_pol[p.polarization]     = stat_pol.get(p.polarization, 0) + 1
+        stat_mode[p.mode]            = stat_mode.get(p.mode, 0) + 1
 
     # ── 更新统计面板 ────────────────────────────────────────────────
-    total = len(app.search_results)
+    total_all   = len(app.search_results)
+    total_shown = len(displayed)
 
     def _fmt(d):
         return "  ".join(f"{k}:{v}" for k, v in sorted(d.items()) if k != "—")
 
     stats_str = (
-        f"共 {total} 景  |  "
+        f"共 {total_shown} 景  |  "
         f"{_fmt(stat_plat)}  |  "
         f"{_fmt(stat_orbit)}  |  "
         f"{_fmt(stat_pol)}  |  "
         f"{_fmt(stat_mode)}"
-    ) if total else "无结果"
+    ) if total_shown else "无结果"
 
     app.lbl_stats.config(text=stats_str)
-    app.lbl_count.config(text=f"搜索结果：{total} 景")
-    app.set_status(f"搜索完成，共 {total} 景")
+    if total_shown != total_all:
+        app.lbl_count.config(text=f"搜索结果：{total_shown}/{total_all} 景（已筛选）")
+    else:
+        app.lbl_count.config(text=f"搜索结果：{total_all} 景")
+    app.set_status(f"搜索完成，共 {total_all} 景"
+                   + (f"，筛选后 {total_shown} 景" if total_shown != total_all else ""))
 
 
 def _add_to_queue(app):
     if not app._selected_iids:
         messagebox.showinfo("提示", "请先勾选要下载的影像（点击第一列 ✓）")
         return
+    displayed = getattr(app, "_displayed", app.search_results)
     queue_ids = {q["id"] for q in app.queue}
     added = 0
     for iid in app._selected_iids:
         idx = int(iid)
-        if idx >= len(app.search_results):
+        if idx >= len(displayed):
             continue
-        p = app.search_results[idx]
-        if p["Id"] in queue_ids:
+        p = displayed[idx]
+        if p.product_id in queue_ids:
             continue
         app.queue.append({
-            "id":     p["Id"],
-            "name":   p.get("Name", p["Id"]),
-            "size":   f"{p.get('ContentLength', 1700*1024*1024)/1024**3:.1f} GB",
+            "id":     p.product_id,
+            "name":   p.name,
+            "size":   p.size_str,
             "status": "waiting",
         })
         added += 1
     render_queue(app)
     render_results(app)
     messagebox.showinfo("✅", f"已添加 {added} 景到下载队列")
+
+
+def _export_csv(app):
+    """把当前展示（筛选后）的搜索结果导出为 CSV。
+
+    用 utf-8-sig（带 BOM），Excel 双击打开中文不乱码。
+    """
+    displayed = getattr(app, "_displayed", None)
+    if displayed is None:
+        displayed = app.search_results
+    if not displayed:
+        messagebox.showinfo("提示", "没有可导出的结果，请先搜索")
+        return
+
+    default_name = f"sentinel_search_{datetime.now():%Y%m%d_%H%M%S}.csv"
+    path = filedialog.asksaveasfilename(
+        title="导出搜索结果为 CSV",
+        defaultextension=".csv",
+        initialfile=default_name,
+        filetypes=[("CSV 文件", "*.csv"), ("所有文件", "*.*")],
+    )
+    if not path:
+        return
+
+    try:
+        with open(path, "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f)
+            w.writerow(["产品名称", "感测时间(UTC)", "平台", "成像模式", "极化",
+                        "轨道方向", "相对轨道号", "绝对轨道号", "大小(GB)", "状态", "产品ID"])
+            for p in displayed:
+                w.writerow([p.name, p.acquisition_time, p.platform, p.mode,
+                            p.polarization, p.orbit_direction, p.relative_orbit,
+                            p.absolute_orbit, f"{p.size_gb:.2f}", p.online_str,
+                            p.product_id])
+        app.set_status(f"已导出 {len(displayed)} 景到 {path}")
+        messagebox.showinfo("✅ 导出成功", f"已导出 {len(displayed)} 景到：\n{path}")
+    except Exception as e:
+        messagebox.showerror("导出失败", str(e))

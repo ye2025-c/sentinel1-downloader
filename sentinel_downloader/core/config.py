@@ -5,21 +5,33 @@
 ────────────────────────────────────────────────────────
 集中存放各类 URL / 预设区域 / 产品类型常量，并提供配置文件读写。
 
-CONFIG_FILE 指向项目根目录（本文件位于 core/ 子目录，故需向上一级）的
-s1_config.json。该文件含账号邮箱与本地保存路径，不纳入版本管理。
+本地数据统一放在项目内 data/ 目录（不纳入版本管理）：
+    data/config.json   账号邮箱、保存路径、默认时间范围
+    data/logs/         下载日志（按天分文件）
+    data/cache.db      搜索 / 历史缓存（V3.2 引入，当前未用）
+
+历史版本把配置存在 sentinel_downloader/s1_config.json，
+load_config 仍会回退读取并自动迁移到 data/config.json，老用户不丢配置。
 """
 
 import os
 import json
+from datetime import datetime
 
 # ── 接口地址 ──────────────────────────────────────────────────────────
 TOKEN_URL    = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
 SEARCH_URL   = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
 DOWNLOAD_URL = "https://download.dataspace.copernicus.eu/odata/v1/Products({id})/$value"
 
-# ── 配置文件路径（项目根目录，即 core/ 的上一级）──────────────────────
+# ── 路径（core/ 的上一级即 sentinel_downloader/）──────────────────────
 BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.normpath(os.path.join(BASE_DIR, "..", "s1_config.json"))
+PROJECT_DIR = os.path.normpath(os.path.join(BASE_DIR, ".."))
+DATA_DIR    = os.path.join(PROJECT_DIR, "data")
+LOG_DIR     = os.path.join(DATA_DIR, "logs")
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+
+# 历史配置位置，仅用于一次性迁移
+_OLD_CONFIG_FILE = os.path.join(PROJECT_DIR, "s1_config.json")
 
 # ── 研究区 AOI 预设（WKT）─────────────────────────────────────────────
 AOI_PRESETS = {
@@ -36,18 +48,56 @@ PRODUCT_TYPES = {
 }
 
 
+def _ensure_data_dirs() -> None:
+    """确保 data/ 与 data/logs/ 存在。"""
+    os.makedirs(LOG_DIR, exist_ok=True)
+
+
 def save_config(data: dict) -> None:
-    """将配置字典写入 s1_config.json（UTF-8，缩进2）。"""
+    """将配置字典写入 data/config.json（UTF-8，缩进2）。"""
+    _ensure_data_dirs()
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 def load_config() -> dict:
-    """读取 s1_config.json，返回字典；文件不存在或解析失败时返回空字典。"""
-    if not os.path.exists(CONFIG_FILE):
-        return {}
+    """读取配置；优先 data/config.json，缺失时回退旧 s1_config.json 并自动迁移。
+
+    文件不存在或解析失败时返回空字典。
+    """
+    # 新位置
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+
+    # 旧位置：读取并一次性迁移到 data/config.json
+    if os.path.exists(_OLD_CONFIG_FILE):
+        try:
+            with open(_OLD_CONFIG_FILE, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+        except Exception:
+            return {}
+        try:
+            save_config(cfg)   # 迁移到新位置，后续以新位置为准
+        except Exception:
+            pass
+        return cfg
+
+    return {}
+
+
+def log_line(msg: str) -> None:
+    """把一行日志追加到 data/logs/download_YYYYMMDD.log（带时间戳）。
+
+    纯文本、按天分文件；写盘失败静默忽略，绝不影响下载主流程。
+    """
     try:
-        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+        _ensure_data_dirs()
+        fname = f"download_{datetime.now():%Y%m%d}.log"
+        with open(os.path.join(LOG_DIR, fname), "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now():%H:%M:%S}] {msg}\n")
     except Exception:
-        return {}
+        pass

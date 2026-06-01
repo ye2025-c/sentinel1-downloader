@@ -16,6 +16,7 @@ from tkinter import ttk
 from datetime import datetime
 
 from core.api import CopernicusAPI
+from core.config import log_line
 from ui.tab_auth import build_auth_tab, load_config_into_ui
 from ui.tab_search import build_search_tab
 from ui.tab_download import build_download_tab
@@ -153,6 +154,7 @@ class App(tk.Tk):
         self.after(0, _do)
 
     def _dlog(self, msg, tag="info"):
+        log_line(msg)                       # 持久化到 data/logs/download_*.log
         self._log(self.dl_log, msg, tag)
 
     def set_status(self, msg):

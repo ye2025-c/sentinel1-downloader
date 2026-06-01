@@ -1201,6 +1201,13 @@ class App(tk.Tk):
             self._dlog(f"═══ 开始下载 {total} 景（并行 {n_workers} 景）═══", "head")
             self._dlog(f"保存路径: {save_dir}", "info")
 
+            # 初始化进度标签
+            self.after(0, lambda: self.lbl_prog.config(
+                text=f"准备下载，共 {total} 景...",
+                fg=self.colors["DIS"]
+            ))
+            self.after(0, lambda: self.prog_bar.config(value=0))
+
             # 所有 worker 共享同一个 api 实例（已内置线程锁），不再各自建实例
             # 避免各实例独立刷新 token 时发生竞争覆盖
             shared_api = CopernicusAPI()
@@ -1219,7 +1226,17 @@ class App(tk.Tk):
                 self.after(0, self._render_queue)
 
                 def _prog(pct):
-                    pass  # 单景进度不更新进度条，避免多线程冲突
+                    # 只让 slot_idx == 0 的 worker 更新进度条，避免多线程互相覆盖
+                    if slot_idx % n_workers != 0:
+                        return
+                    short = name[:30]
+                    label = (f"第 {slot_idx+1}/{total} 景（并行 {n_workers} 景）：{short}  {pct:.0f}%"
+                             if n_workers > 1 else
+                             f"第 {slot_idx+1}/{total} 景：{short}  {pct:.0f}%")
+                    self.after(0, lambda p=pct, lb=label: (
+                        self.prog_bar.config(value=p),
+                        self.lbl_prog.config(text=lb, fg=self.colors["ACC"])
+                    ))
 
                 ok, _ = shared_api.download(
                     q["id"], name, save_dir, u, p,
@@ -1234,11 +1251,31 @@ class App(tk.Tk):
                         ok_cnt += 1
                 q["status"] = "done" if ok else "error"
                 self.after(0, self._render_queue)
-                # 更新总进度条（已完成景数 / 总景数）
+
+                # 景完成：进度条推到100%，标签更新，短暂停留后清零等待下一景
                 done = sum(1 for qq in pending if qq["status"] in ("done", "error"))
-                self.after(0, lambda d=done: self.prog_bar.config(value=d / total * 100))
+                status_icon = "✅" if ok else "❌"
+                finish_label = f"{status_icon} 第 {done}/{total} 景完成：{name[:30]}"
+
+                def _on_one_done(d=done, fl=finish_label):
+                    if slot_idx % n_workers == 0:
+                        self.prog_bar.config(value=100)
+                    self.lbl_prog.config(text=fl,
+                                         fg=self.colors["GRN"] if ok else self.colors["RED"])
+
+                self.after(0, _on_one_done)
                 self.after(0, lambda n=name, ok=ok:
-                    self._dlog(f"  {'✅' if ok else '❌'} [{n[:40]}] {'完成' if ok else '失败'}", "ok" if ok else "err"))
+                    self._dlog(f"  {'✅' if ok else '❌'} [{n[:40]}] {'完成' if ok else '失败'}",
+                               "ok" if ok else "err"))
+
+                # 如果还有后续景，延迟300ms后将进度条清零，视觉上有"刷新感"
+                if done < total:
+                    def _reset_bar():
+                        self.prog_bar.config(value=0)
+                        self.lbl_prog.config(text=f"等待下一景... ({done}/{total})",
+                                             fg=self.colors["DIS"])
+                    self.after(300, _reset_bar)
+
                 return ok
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=n_workers) as executor:

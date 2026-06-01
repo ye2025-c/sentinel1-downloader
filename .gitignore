@@ -1,0 +1,18 @@
+# 本地配置（含邮箱/路径，不上传）
+s1_config.json
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 下载的数据
+*.zip
+*.SAFE/
+
+# 编辑器/系统
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

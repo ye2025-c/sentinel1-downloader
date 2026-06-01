@@ -1,0 +1,7 @@
+s1_config.json
+__pycache__/
+*.pyc
+dist/
+build/
+*.spec.bak
+.env

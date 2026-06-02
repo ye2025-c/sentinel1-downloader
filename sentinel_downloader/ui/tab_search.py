@@ -16,6 +16,7 @@ from tkinter import ttk, messagebox, filedialog
 from core.config import PRODUCT_TYPES, S2_PRODUCT_TYPES
 from core.store import HistoryStore, SearchCache
 from ui.aoi_panel import build_aoi_section
+from ui.map_widget import open_map_window
 from ui.tab_download import render_queue
 
 
@@ -241,6 +242,8 @@ def build_search_tab(app):
     app.lbl_count.pack(side="left")
     ttk.Button(rtb, text="全选", command=lambda: _select_all(app)).pack(side="right", padx=4)
     ttk.Button(rtb, text="全不选", command=lambda: _deselect_all(app)).pack(side="right", padx=4)
+    ttk.Button(rtb, text="🗺 地图查看",
+               command=lambda: _view_on_map(app)).pack(side="right", padx=4)
     ttk.Button(rtb, text="📄 导出 CSV",
                command=lambda: _export_csv(app)).pack(side="right", padx=4)
     ttk.Button(rtb, text="+ 加入下载队列", style="Green.TButton",
@@ -656,6 +659,20 @@ def render_results(app, from_cache=False):
         app.lbl_count.config(text=f"搜索结果：{total_all} 景{cache_hint}")
     app.set_status(f"搜索完成，共 {total_all} 景{cache_hint}"
                    + (f"，筛选后 {total_shown} 景" if total_shown != total_all else ""))
+
+
+def _view_on_map(app):
+    """在地图上叠加显示当前展示的搜索结果 footprint。"""
+    displayed = getattr(app, "_displayed", None)
+    if not displayed:
+        messagebox.showinfo("提示", "没有可显示的搜索结果，请先搜索")
+        return
+    has_fp = any(getattr(p, "footprint", "") for p in displayed)
+    if not has_fp:
+        messagebox.showinfo("提示", "当前结果没有 footprint 覆盖范围数据")
+        return
+    current_wkt = app.ent_wkt.get("1.0", "end").strip()
+    open_map_window(app, initial_wkt=current_wkt, products=displayed)
 
 
 def _add_to_queue(app):

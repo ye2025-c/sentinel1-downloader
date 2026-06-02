@@ -7,12 +7,13 @@ open_map_window(app) 打开一个 Toplevel 窗口，内嵌 tkintermapview。
 
 功能：
   - 显示当前 AOI 轮廓（蓝色高亮多边形）
+  - 叠加显示搜索结果各景 footprint 覆盖范围（橙色细线）
   - 两次点击绘制矩形范围（不干扰地图平移/缩放）
   - 确认后将 WKT 写回 app.ent_wkt，并触发 AOI 面板刷新
   - 底图加载失败时静默降级，显示提示文字，坐标功能正常
 
 降级策略：
-  级别 1 — 正常：tkintermapview 内嵌地图 + AOI 轮廓
+  级别 1 — 正常：tkintermapview 内嵌地图 + AOI 轮廓 + footprint 叠加
   级别 2 — 失败：显示"底图加载失败"文字，bbox 坐标仍可显示
 """
 
@@ -22,25 +23,33 @@ from tkinter import ttk, messagebox, simpledialog
 
 from core.aoi_manager import AoiManager
 
+# 单次叠加绘制的 footprint 上限，过多会拖慢地图渲染
+_MAX_FOOTPRINTS = 200
 
-def open_map_window(app, initial_wkt: str = ""):
-    """打开地图预览 / 画框 Toplevel。"""
-    win = _MapWindow(app, initial_wkt)
+
+def open_map_window(app, initial_wkt: str = "", products=None):
+    """打开地图预览 / 画框 Toplevel。
+
+    products : Product 列表，传入时在地图上叠加各景 footprint 覆盖范围。
+    """
+    win = _MapWindow(app, initial_wkt, products)
     win.grab_set()
     win.focus_set()
 
 
 class _MapWindow(tk.Toplevel):
-    def __init__(self, app, initial_wkt: str = ""):
+    def __init__(self, app, initial_wkt: str = "", products=None):
         super().__init__(app)
         self.app          = app
-        self.title("地图预览 / 画框")
+        self._products    = products or []
+        self.title("搜索结果地图预览" if self._products else "地图预览 / 画框")
         self.geometry("740x560")
         self.minsize(600, 440)
         self.resizable(True, True)
 
         self._has_map       = False
         self._current_poly  = None   # 当前 AOI polygon 对象
+        self._fp_polys      = []     # 搜索结果 footprint polygon 对象列表
         self._drawn_wkt     = ""     # 最新绘制 / 来自文件的 WKT
         self._draw_clicks   = []     # 画框时收集的两个角点
         self._drawing       = False
@@ -48,9 +57,12 @@ class _MapWindow(tk.Toplevel):
         self._build_ui()
         self._load_map()
 
+        # 先叠加搜索结果 footprint，再叠加 AOI（AOI 在最上层）
+        if self._products:
+            self.after(800, self._show_products)
         if initial_wkt:
             self._drawn_wkt = initial_wkt
-            self.after(800, lambda: self._show_aoi(initial_wkt))
+            self.after(900, lambda: self._show_aoi(initial_wkt))
 
     # ── 界面构建 ──────────────────────────────────────────
     def _build_ui(self):
@@ -182,6 +194,49 @@ class _MapWindow(tk.Toplevel):
                 self.map_widget.set_zoom(zoom)
         except Exception:
             pass
+
+    # ── 搜索结果 footprint 叠加 ───────────────────────────
+    def _show_products(self):
+        """在地图上叠加绘制所有景的 footprint，并缩放到总范围。"""
+        if not self._has_map or not self._products:
+            return
+
+        drawn = 0
+        all_lats, all_lons = [], []
+        for p in self._products[:_MAX_FOOTPRINTS]:
+            positions = AoiManager.wkt_to_positions(getattr(p, "footprint", ""))
+            if not positions:
+                continue
+            try:
+                poly = self.map_widget.set_polygon(
+                    position_list = positions,
+                    fill_color    = "",
+                    outline_color = "#FF8800",
+                    border_width  = 1,
+                    name          = getattr(p, "name", ""),
+                )
+                self._fp_polys.append(poly)
+                all_lats.extend(lat for lat, _ in positions)
+                all_lons.extend(lon for _, lon in positions)
+                drawn += 1
+            except Exception:
+                continue
+
+        # 缩放到所有 footprint 的总范围
+        if all_lats and all_lons:
+            bbox = [min(all_lons), min(all_lats), max(all_lons), max(all_lats)]
+            center_lat = (bbox[1] + bbox[3]) / 2
+            center_lon = (bbox[0] + bbox[2]) / 2
+            self.map_widget.set_position(center_lat, center_lon, marker=False)
+            self.map_widget.set_zoom(AoiManager.bbox_zoom(bbox))
+
+        total = len(self._products)
+        extra = f"（仅显示前 {_MAX_FOOTPRINTS} 景）" if total > _MAX_FOOTPRINTS else ""
+        no_fp = total - drawn if total <= _MAX_FOOTPRINTS else 0
+        msg = f"已叠加 {drawn} 景覆盖范围{extra}"
+        if no_fp > 0:
+            msg += f"，{no_fp} 景无 footprint 数据"
+        self.status_var.set(msg)
 
     # ── 按钮回调 ──────────────────────────────────────────
     def _apply(self):

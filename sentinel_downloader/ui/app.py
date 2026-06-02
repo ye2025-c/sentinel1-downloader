@@ -19,6 +19,7 @@ import ttkbootstrap as ttkb
 
 from core.api import CopernicusAPI
 from core.config import log_line
+from core.store import SearchCache
 from ui.tab_auth import build_auth_tab, load_config_into_ui
 from ui.tab_search import build_search_tab
 from ui.tab_download import build_download_tab
@@ -58,6 +59,7 @@ class App(ttkb.Window):
         self._setup_style()
         self._build_ui()
         load_config_into_ui(self)       # 填充各 Entry 控件
+        SearchCache.clear_expired()     # 清理过期搜索缓存
 
     # ── 样式 ──────────────────────────────────
     def _setup_style(self):

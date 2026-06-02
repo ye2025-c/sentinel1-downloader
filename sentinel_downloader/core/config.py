@@ -6,9 +6,10 @@
 集中存放各类 URL / 预设区域 / 产品类型常量，并提供配置文件读写。
 
 本地数据统一放在项目内 data/ 目录（不纳入版本管理）：
-    data/config.json   账号邮箱、保存路径、默认时间范围
-    data/logs/         下载日志（按天分文件）
-    data/cache.db      搜索 / 历史缓存（V3.2 引入，当前未用）
+    data/config.json            账号邮箱、保存路径、默认时间范围
+    data/logs/                  下载日志（按天分文件）
+    data/download_history.json  下载历史（V3.2 引入）
+    data/search_cache.json      搜索结果缓存，TTL=24h（V3.2 引入）
 
 历史版本把配置存在 sentinel_downloader/s1_config.json，
 load_config 仍会回退读取并自动迁移到 data/config.json，老用户不丢配置。

@@ -13,6 +13,7 @@ from tkinter import ttk, messagebox, scrolledtext
 
 from core.api import CopernicusAPI
 from core.downloader import download as do_download
+from core.store import HistoryStore
 
 
 def build_download_tab(app):
@@ -87,9 +88,9 @@ def build_download_tab(app):
 
     # 下载日志
     lf = ttk.LabelFrame(f, text=" 下载日志 ", padding=8)
-    lf.pack(fill="x", padx=12, pady=(0, 12))
+    lf.pack(fill="x", padx=12, pady=(0, 6))
     app.dl_log = scrolledtext.ScrolledText(
-        lf, height=10, bg=C["BG2"], fg=C["FG"],
+        lf, height=8, bg=C["BG2"], fg=C["FG"],
         font=("Consolas", 9), insertbackground=C["FG"],
         relief="flat", state="disabled", wrap="word")
     app.dl_log.pack(fill="x")
@@ -99,7 +100,40 @@ def build_download_tab(app):
     app.dl_log.tag_config("info", foreground=C["ACC"])
     app.dl_log.tag_config("head", foreground=C["FG"], font=("Consolas", 9, "bold"))
 
+    # 下载历史
+    hf = ttk.LabelFrame(f, text=" 下载历史 ", padding=8)
+    hf.pack(fill="x", padx=12, pady=(0, 12))
+
+    htb = ttk.Frame(hf)
+    htb.pack(fill="x", pady=(0, 6))
+    app.lbl_hist = tk.Label(htb, text="历史记录：0 条",
+                            fg=C["DIS"], font=(app.FONT_UI, 9), bg=C["BG"])
+    app.lbl_hist.pack(side="left")
+    ttk.Button(htb, text="清除历史",
+               command=lambda: _clear_history(app)).pack(side="right")
+
+    hcols = ("hname", "hsize", "hstatus", "htime")
+    app.htree = ttk.Treeview(hf, columns=hcols, show="headings",
+                             selectmode="none", height=4)
+    app.htree.heading("hname",   text="产品名称")
+    app.htree.heading("hsize",   text="大小")
+    app.htree.heading("hstatus", text="状态")
+    app.htree.heading("htime",   text="完成时间")
+    app.htree.column("hname",   width=430, anchor="w",      stretch=True)
+    app.htree.column("hsize",   width=70,  anchor="center", stretch=False)
+    app.htree.column("hstatus", width=90,  anchor="center", stretch=False)
+    app.htree.column("htime",   width=150, anchor="center", stretch=False)
+    app.htree.tag_configure("completed", foreground=C["GRN"])
+    app.htree.tag_configure("failed",    foreground=C["RED"])
+    app.htree.tag_configure("downloading", foreground=C["ACC"])
+
+    hsb = ttk.Scrollbar(hf, orient="vertical", command=app.htree.yview)
+    app.htree.configure(yscrollcommand=hsb.set)
+    app.htree.pack(side="left", fill="x", expand=True)
+    hsb.pack(side="right", fill="y")
+
     app._stop_event = threading.Event()
+    render_history(app)
 
 
 # ─────────────────────────────────────────────
@@ -221,6 +255,7 @@ def _start_download(app):
             name = q["name"]
             app._dlog(f"  ↓ [{name[:40]}] 开始", "head")
 
+            HistoryStore.add(q["id"], name, q.get("size", ""), save_dir)
             q["status"] = "downloading"
             app.after(0, lambda: render_queue(app))
 
@@ -249,7 +284,9 @@ def _start_download(app):
                 if ok:
                     ok_cnt += 1
             q["status"] = "done" if ok else "error"
+            HistoryStore.update_status(q["id"], "completed" if ok else "failed")
             app.after(0, lambda: render_queue(app))
+            app.after(0, lambda: render_history(app))
 
             # 景完成：进度条推到100%，标签更新，短暂停留后清零等待下一景
             done = sum(1 for qq in pending if qq["status"] in ("done", "error"))
@@ -304,3 +341,30 @@ def _stop_download(app):
     app._stop_event.set()
     app.set_status("正在停止...")
     app.btn_stop.config(state="disabled")   # 防止重复点击
+
+
+# ─────────────────────────────────────────────
+#  下载历史
+# ─────────────────────────────────────────────
+def render_history(app):
+    """刷新历史面板显示。"""
+    for iid in app.htree.get_children():
+        app.htree.delete(iid)
+    records = HistoryStore.get_all()
+    for i, r in enumerate(records):
+        status_txt = {"completed": "✅ 完成", "failed": "❌ 失败",
+                      "downloading": "⏳ 下载中"}.get(r.get("status", ""), r.get("status", ""))
+        finished = r.get("finished_at") or r.get("started_at", "")
+        if finished:
+            finished = finished.replace("T", " ")
+        app.htree.insert("", "end", iid=str(i),
+                         values=(r.get("product_name", ""), r.get("size", ""),
+                                 status_txt, finished),
+                         tags=(r.get("status", ""),))
+    app.lbl_hist.config(text=f"历史记录：{len(records)} 条")
+
+
+def _clear_history(app):
+    if messagebox.askyesno("确认", "确定清除所有下载历史？"):
+        HistoryStore.clear()
+        render_history(app)

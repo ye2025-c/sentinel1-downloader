@@ -14,6 +14,7 @@ from datetime import datetime
 from tkinter import ttk, messagebox, filedialog
 
 from core.config import AOI_PRESETS, PRODUCT_TYPES
+from core.store import HistoryStore, SearchCache
 from ui.tab_download import render_queue
 
 
@@ -208,7 +209,7 @@ def build_search_tab(app):
 
     # 客户端高级筛选：对已检索结果实时子串过滤，不重新请求服务器
     ftb = ttk.Frame(right)
-    ftb.pack(fill="x", pady=(0, 6))
+    ftb.pack(fill="x", pady=(4, 8))
     tk.Label(ftb, text="🔎 筛选：", fg=C["DIS"], font=(app.FONT_UI, 9),
              bg=C["BG"]).pack(side="left")
     app.filter_var = tk.StringVar()
@@ -243,13 +244,13 @@ def build_search_tab(app):
     app.tree.heading("online",    text="状态")
     app.tree.column("sel",       width=30,  anchor="center", stretch=False)
     app.tree.column("name",      width=340, anchor="w",      stretch=False)
-    app.tree.column("date",      width=145, anchor="center", stretch=False)
+    app.tree.column("date",      width=158, anchor="center", stretch=False)
     app.tree.column("platform",  width=50,  anchor="center", stretch=False)
     app.tree.column("mode",      width=50,  anchor="center", stretch=False)
     app.tree.column("pol",       width=70,  anchor="center", stretch=False)
-    app.tree.column("orbit_dir", width=55,  anchor="center", stretch=False)
-    app.tree.column("rel_orbit", width=80,  anchor="center", stretch=False)
-    app.tree.column("abs_orbit", width=80,  anchor="center", stretch=False)
+    app.tree.column("orbit_dir", width=60,  anchor="center", stretch=False)
+    app.tree.column("rel_orbit", width=92,  anchor="center", stretch=False)
+    app.tree.column("abs_orbit", width=92,  anchor="center", stretch=False)
     app.tree.column("size",      width=65,  anchor="center", stretch=False)
     app.tree.column("online",    width=65,  anchor="center", stretch=False)
     app.tree.tag_configure("even", background=C["BG2"])
@@ -367,11 +368,26 @@ def _do_search(app):
     absolute_orbit = [s.strip() for s in abs_orbit_str.split(",")
                       if s.strip().isdigit()] if abs_orbit_str else None
 
+    # 构造缓存键（包含所有影响结果的参数）
+    cache_params = {
+        "wkt": wkt, "date_from": date_from, "date_to": date_to,
+        "product_type": product_type, "max_results": max_results,
+        "platforms": sorted(platforms), "orbit_dir": orbit_dir,
+        "polarisation": polarisation, "relative_orbit": relative_orbit,
+        "online_only": online_only, "acq_mode": acq_mode,
+        "absolute_orbit": sorted(absolute_orbit) if absolute_orbit else None,
+    }
+
     app.lbl_count.config(text="搜索中...")
     app.set_status("正在搜索...")
 
     def _run():
         try:
+            cached = SearchCache.get(cache_params)
+            if cached is not None:
+                app.search_results = cached
+                app.after(0, lambda: render_results(app, from_cache=True))
+                return
             results = app.api.search(
                 wkt, date_from, date_to, product_type, max_results,
                 platforms=platforms,
@@ -382,6 +398,7 @@ def _do_search(app):
                 acq_mode=acq_mode,
                 absolute_orbit=absolute_orbit,
             )
+            SearchCache.set(cache_params, results)
             app.search_results = results
             app.after(0, lambda: render_results(app))
         except Exception as e:
@@ -459,7 +476,7 @@ def _filtered_products(app):
     return [p for p in app.search_results if kw in _product_haystack(p)]
 
 
-def render_results(app):
+def render_results(app, from_cache=False):
     for iid in app.tree.get_children():
         app.tree.delete(iid)
     app._selected_iids.clear()
@@ -468,7 +485,8 @@ def render_results(app):
     displayed = _filtered_products(app)
     app._displayed = displayed
 
-    queue_ids = {q["id"] for q in app.queue}
+    queue_ids      = {q["id"] for q in app.queue}
+    downloaded_ids = HistoryStore.downloaded_ids()
 
     # ── 统计计数器（针对当前展示集）────────────────────────────────
     stat_plat  = {}   # {"S1A": n, ...}
@@ -477,14 +495,15 @@ def render_results(app):
     stat_mode  = {}   # {"IW": n, ...}
 
     for i, p in enumerate(displayed):
-        inq = " ★" if p.product_id in queue_ids else ""
-        tag = "even" if i % 2 == 0 else "odd"
+        inq     = " ★" if p.product_id in queue_ids else ""
+        dl_mark = " ✓" if p.product_id in downloaded_ids else ""
+        tag     = "even" if i % 2 == 0 else "odd"
 
         app.tree.insert("", "end", iid=str(i),
                         values=("", p.name, p.acquisition_time + " UTC",
                                 p.platform, p.mode, p.polarization,
                                 p.orbit_direction, p.relative_orbit, p.absolute_orbit,
-                                f"{p.size_gb:.1f}GB", p.online_str + inq),
+                                f"{p.size_gb:.1f}GB", p.online_str + dl_mark + inq),
                         tags=(tag,))
 
         # 累计统计
@@ -509,11 +528,12 @@ def render_results(app):
     ) if total_shown else "无结果"
 
     app.lbl_stats.config(text=stats_str)
+    cache_hint = "（来自缓存）" if from_cache else ""
     if total_shown != total_all:
-        app.lbl_count.config(text=f"搜索结果：{total_shown}/{total_all} 景（已筛选）")
+        app.lbl_count.config(text=f"搜索结果：{total_shown}/{total_all} 景（已筛选）{cache_hint}")
     else:
-        app.lbl_count.config(text=f"搜索结果：{total_all} 景")
-    app.set_status(f"搜索完成，共 {total_all} 景"
+        app.lbl_count.config(text=f"搜索结果：{total_all} 景{cache_hint}")
+    app.set_status(f"搜索完成，共 {total_all} 景{cache_hint}"
                    + (f"，筛选后 {total_shown} 景" if total_shown != total_all else ""))
 
 

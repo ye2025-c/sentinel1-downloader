@@ -12,8 +12,6 @@ import time
 
 import requests
 
-from core.config import DOWNLOAD_URL
-
 
 def download(api, product_id, product_name, save_dir,
              username, password, log_cb=None, prog_cb=None,
@@ -43,11 +41,12 @@ def download(api, product_id, product_name, save_dir,
         try:
             api.refresh_if_needed(username, password)
             existing = os.path.getsize(save_path) if os.path.exists(save_path) else 0
-            headers  = {"Authorization": f"Bearer {api.token}"}
+            headers  = api.get_auth_headers()
+            url      = api.get_download_url(product_id)
 
             # ── 先用 HEAD 请求获取服务器文件大小，用于断点续传校验 ──
             head_resp = requests.head(
-                DOWNLOAD_URL.format(id=product_id),
+                url,
                 headers=headers,
                 timeout=(15, 30),       # (connect, read)
                 allow_redirects=True
@@ -71,7 +70,6 @@ def download(api, product_id, product_name, save_dir,
                     existing = 0
                     headers.pop("Range", None)
 
-            url = DOWNLOAD_URL.format(id=product_id)
             # ── 关键修复：timeout 拆为元组，read_timeout 设 120s ────
             # connect_timeout=15s：建立 TCP 连接的最长等待
             # read_timeout=120s：两次 chunk 之间最长允许的空闲时间

@@ -12,15 +12,20 @@ import threading
 
 import requests
 
-from core.config import TOKEN_URL, SEARCH_URL
+from core.config import TOKEN_URL, SEARCH_URL, DOWNLOAD_URL
+from core.datasource import DataSource
 from core.models import Product
 
 
-class CopernicusAPI:
+class CopernicusAPI(DataSource):
+    """Copernicus Data Space Ecosystem（CDSE）数据源。
+
+    继承 DataSource，实现三个接口方法，接入现有下载内核。
+    """
+    name = "Copernicus CDSE (Sentinel)"
+
     def __init__(self):
-        self.token = None
-        self.token_time = 0
-        self._token_lock = threading.Lock()   # 防止多线程并发刷新 token
+        super().__init__()
 
     def get_token(self, username, password):
         resp = requests.post(TOKEN_URL, data={
@@ -40,6 +45,12 @@ class CopernicusAPI:
             if time.time() - self.token_time > 540:
                 self.get_token(username, password)
         return self.token
+
+    def get_auth_headers(self) -> dict:
+        return {"Authorization": f"Bearer {self.token}"}
+
+    def get_download_url(self, product_id: str) -> str:
+        return DOWNLOAD_URL.format(id=product_id)
 
     def search(self, wkt, date_from, date_to, product_type, max_results=100,
                platforms=None, orbit_dir=None, polarisation=None,

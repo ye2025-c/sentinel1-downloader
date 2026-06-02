@@ -11,6 +11,7 @@ Product.from_odata() 一处。UI 渲染、CSV 导出、下载队列都用
 不堆砌冗余字段（下载 URL 由 id 构造，不单独存储）。
 """
 
+import re
 from dataclasses import dataclass
 
 # OData 默认大小回退：单景 S1 GRD 约 1.7 GB（部分检索结果不含 ContentLength）
@@ -33,6 +34,7 @@ class Product:
     absolute_orbit: str      # 绝对轨道号（字符串，缺失为 "—"）
     size_gb: float           # 文件大小（GB）
     online: bool             # True=在线可直接下载，False=归档
+    footprint: str = ""      # 影像覆盖范围 WKT（来自 GeoFootprint，V3.3 引入）
 
     # ── 展示辅助 ─────────────────────────────────────────────
     @property
@@ -43,6 +45,26 @@ class Product:
     @property
     def online_str(self) -> str:
         return "✓在线" if self.online else "归档"
+
+    # ── 解析辅助 ────────────────────────────────────────────
+    @staticmethod
+    def _geojson_to_wkt(geom: dict) -> str:
+        """将 GeoJSON Polygon/MultiPolygon geometry 转为 WKT 字符串。"""
+        if not geom:
+            return ""
+        gtype = geom.get("type", "")
+        coords = geom.get("coordinates", [])
+        try:
+            if gtype == "Polygon" and coords:
+                ring = coords[0]
+            elif gtype == "MultiPolygon" and coords:
+                ring = coords[0][0]
+            else:
+                return ""
+            pts = ", ".join(f"{c[0]} {c[1]}" for c in ring)
+            return f"POLYGON(({pts}))"
+        except Exception:
+            return ""
 
     # ── 解析 ────────────────────────────────────────────────
     @classmethod
@@ -75,6 +97,8 @@ class Product:
 
         size_bytes = raw.get("ContentLength", _DEFAULT_SIZE_BYTES)
 
+        footprint = cls._geojson_to_wkt(raw.get("GeoFootprint", {}))
+
         return cls(
             product_id     = raw.get("Id", ""),
             name           = name,
@@ -87,4 +111,5 @@ class Product:
             absolute_orbit = str(attrs.get("absoluteOrbitNumber", "—")),
             size_gb        = size_bytes / 1024 ** 3,
             online         = bool(raw.get("Online", True)),
+            footprint      = footprint,
         )

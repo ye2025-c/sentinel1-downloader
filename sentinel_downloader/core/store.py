@@ -56,13 +56,15 @@ class HistoryStore:
             pass
 
     @classmethod
-    def add(cls, product_id: str, product_name: str, size_str: str, save_dir: str):
+    def add(cls, product_id: str, product_name: str, size_str: str, save_dir: str,
+            footprint: str = ""):
         """新增或覆盖一条下载记录（初始状态 downloading）。"""
         record = {
             "product_id":   product_id,
             "product_name": product_name,
             "size":         size_str,
             "save_dir":     save_dir,
+            "footprint":    footprint,
             "status":       "downloading",
             "started_at":   datetime.now().isoformat(timespec="seconds"),
             "finished_at":  None,

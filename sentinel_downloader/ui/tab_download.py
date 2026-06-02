@@ -14,6 +14,7 @@ from tkinter import ttk, messagebox, scrolledtext
 from core.api import CopernicusAPI
 from core.downloader import download as do_download
 from core.store import HistoryStore
+from core.aoi_manager import AoiManager
 
 
 def build_download_tab(app):
@@ -111,10 +112,12 @@ def build_download_tab(app):
     app.lbl_hist.pack(side="left")
     ttk.Button(htb, text="清除历史",
                command=lambda: _clear_history(app)).pack(side="right")
+    ttk.Button(htb, text="存为 AOI",
+               command=lambda: _save_hist_as_aoi(app)).pack(side="right", padx=(0, 6))
 
     hcols = ("hname", "hsize", "hstatus", "htime")
     app.htree = ttk.Treeview(hf, columns=hcols, show="headings",
-                             selectmode="none", height=4)
+                             selectmode="browse", height=4)
     app.htree.heading("hname",   text="产品名称")
     app.htree.heading("hsize",   text="大小")
     app.htree.heading("hstatus", text="状态")
@@ -255,7 +258,8 @@ def _start_download(app):
             name = q["name"]
             app._dlog(f"  ↓ [{name[:40]}] 开始", "head")
 
-            HistoryStore.add(q["id"], name, q.get("size", ""), save_dir)
+            HistoryStore.add(q["id"], name, q.get("size", ""), save_dir,
+                             footprint=q.get("footprint", ""))
             q["status"] = "downloading"
             app.after(0, lambda: render_queue(app))
 
@@ -368,3 +372,30 @@ def _clear_history(app):
     if messagebox.askyesno("确认", "确定清除所有下载历史？"):
         HistoryStore.clear()
         render_history(app)
+
+
+def _save_hist_as_aoi(app):
+    """将选中历史记录的 footprint 存入 AOI 库。"""
+    from tkinter import simpledialog
+    sel = app.htree.selection()
+    if not sel:
+        messagebox.showinfo("提示", "请先在历史列表中选中一条记录")
+        return
+    idx     = int(sel[0])
+    records = HistoryStore.get_all()
+    if idx >= len(records):
+        return
+    record   = records[idx]
+    footprint = record.get("footprint", "")
+    if not footprint:
+        messagebox.showinfo("提示", "该记录没有 footprint 数据（需重新下载后才能获取）")
+        return
+    default = record.get("product_name", "")[:20]
+    name = simpledialog.askstring("存为 AOI", "请输入 AOI 名称：",
+                                  initialvalue=default)
+    if not name or not name.strip():
+        return
+    AoiManager.add(name.strip(), footprint, source="history")
+    if callable(getattr(app, "aoi_panel_refresh", None)):
+        app.aoi_panel_refresh()
+    messagebox.showinfo("✅", f"已保存到 AOI 库：{name.strip()}")

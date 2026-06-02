@@ -13,8 +13,9 @@ import tkinter as tk
 from datetime import datetime
 from tkinter import ttk, messagebox, filedialog
 
-from core.config import AOI_PRESETS, PRODUCT_TYPES
+from core.config import PRODUCT_TYPES
 from core.store import HistoryStore, SearchCache
+from ui.aoi_panel import build_aoi_section
 from ui.tab_download import render_queue
 
 
@@ -67,25 +68,8 @@ def build_search_tab(app):
     app.ent_to.insert(0, "2025-08-31")
     app.ent_to.pack(side="left")
 
-    # AOI
-    abox = ttk.LabelFrame(left, text=" 研究区 AOI ", padding=10)
-    abox.pack(fill="x", pady=(0, 8))
-    app.aoi_var = tk.StringVar(value="海河北系全域")
-    for name in AOI_PRESETS:
-        rb = tk.Radiobutton(abox, text=name, variable=app.aoi_var, value=name,
-                            bg=C["BG"], fg=C["FG"], selectcolor=C["BG2"],
-                            activebackground=C["BG"], activeforeground=C["ACC"],
-                            font=(app.FONT_UI, 9), command=lambda: _aoi_changed(app))
-        rb.pack(anchor="w")
-    tk.Radiobutton(abox, text="自定义 WKT", variable=app.aoi_var, value="custom",
-                   bg=C["BG"], fg=C["FG"], selectcolor=C["BG2"],
-                   activebackground=C["BG"], activeforeground=C["ACC"],
-                   font=(app.FONT_UI, 9), command=lambda: _aoi_changed(app)).pack(anchor="w")
-    app.ent_wkt = tk.Text(abox, height=3, bg=C["BG2"], fg=C["FG"],
-                          font=(app.FONT_MONO, 8), insertbackground=C["FG"],
-                          relief="flat", wrap="word")
-    app.ent_wkt.pack(fill="x", pady=(4, 0))
-    _aoi_changed(app)
+    # AOI（由 aoi_panel.py 构建，含列表 / 文件导入 / 地图画框）
+    build_aoi_section(app, left)
 
     # 产品参数
     pbox = ttk.LabelFrame(left, text=" 产品参数 ", padding=10)
@@ -276,13 +260,6 @@ def build_search_tab(app):
 # ─────────────────────────────────────────────
 #  事件回调
 # ─────────────────────────────────────────────
-def _aoi_changed(app):
-    val = app.aoi_var.get()
-    app.ent_wkt.delete("1.0", "end")
-    if val in AOI_PRESETS:
-        app.ent_wkt.insert("1.0", AOI_PRESETS[val])
-
-
 def _tree_click(app, event):
     """点击第一列切换勾选"""
     col = app.tree.identify_column(event.x)
@@ -552,10 +529,11 @@ def _add_to_queue(app):
         if p.product_id in queue_ids:
             continue
         app.queue.append({
-            "id":     p.product_id,
-            "name":   p.name,
-            "size":   p.size_str,
-            "status": "waiting",
+            "id":       p.product_id,
+            "name":     p.name,
+            "size":     p.size_str,
+            "status":   "waiting",
+            "footprint": p.footprint,
         })
         added += 1
     render_queue(app)

@@ -15,7 +15,7 @@
 - OData 服务端筛选 + 客户端关键字实时过滤
 - 按产品名精确搜索（官网复制文件名直接粘贴）
 - 搜索结果统计、CSV 导出
-- **搜索结果缓存**（24h TTL）：重复搜索秒级响应
+- **搜索结果缓存**（默认 24h，可在设置调整）：重复搜索秒级响应
 
 ### 空间范围管理（AOI）
 - 内置研究区预设 + 用户自定义 AOI 库
@@ -25,6 +25,8 @@
 
 ### 下载管理
 - 批量并行下载 / 断点续传 / 自动重试 / Token 自动刷新
+- **完整性校验**：下载收尾校验文件大小与 ZIP 结构，不完整 / 损坏自动续传重试
+- **队列持久化**：下载队列实时落盘，程序关闭或崩溃后重启自动恢复未完成任务
 - 下载日志与速度实时显示
 - **下载历史**：记录每景下载状态，搜索结果中已下载产品自动标记 ✓
 
@@ -34,6 +36,10 @@
 - 复用同款下载策略：`.part` 断点续传 / 失败退避重试 / 原子落盘 / 实时进度与速度
 - 认证使用「账号配置」页填写的 Earthdata 账号（HTTP Basic，经 `urs.earthdata.nasa.gov` 重定向）
 
+### 设置
+- 集中调整：默认并行数、单文件最大重试、连接 / 读取超时、NASA 文件间隔、搜索缓存有效期、ZIP 完整性校验开关、日志保留天数
+- 统一存入 `config.json`，缺省项自动回退默认值，下次操作即生效
+
 ## 项目结构
 
 ```
@@ -42,30 +48,32 @@ sentinel_downloader/
 ├── requirements.txt
 │
 ├── core/                   # 业务逻辑层（无 UI 依赖）
-│   ├── config.py           # 常量 + 配置读写
+│   ├── config.py           # 常量 + 配置读写 + 设置项（get_setting）
 │   ├── datasource.py       # 数据源基类（多数据源扩展接口）
 │   ├── api.py              # CopernicusAPI（Sentinel-1）
 │   ├── s2_api.py           # SentinelS2API（Sentinel-2）
-│   ├── downloader.py       # download() 下载内核（CDSE，数据源无关）
+│   ├── downloader.py       # download() 下载内核（CDSE，含完整性校验）
 │   ├── earthdata.py        # NASA Earthdata 下载内核（独立于 CDSE）
 │   ├── models.py           # Product 数据模型
-│   ├── store.py            # 下载历史 + 搜索缓存（JSON 存储）
+│   ├── store.py            # 下载历史 + 搜索缓存 + 队列持久化（JSON 存储）
 │   └── aoi_manager.py      # AOI 解析 / 库管理
 │
 ├── ui/                     # 界面层
-│   ├── app.py              # App 主窗口 + 样式 + 共享工具
+│   ├── app.py              # App 主窗口 + 样式 + 共享工具 + 队列持久化
 │   ├── tab_auth.py         # 账号配置 Tab（CDSE + Earthdata）
 │   ├── tab_search.py       # 搜索影像 Tab（S1/S2 切换）
 │   ├── tab_download.py     # 下载管理 Tab（含下载历史）
 │   ├── tab_nasa.py         # NASA 下载 Tab（URL 列表批量下载）
+│   ├── tab_settings.py     # 设置 Tab（并行 / 重试 / 超时 / 缓存 / 日志）
 │   ├── aoi_panel.py        # AOI 管理面板
 │   └── map_widget.py       # 地图预览 / 画框窗口
 │
 └── data/                   # 本地数据（不纳入版本管理）
-    ├── config.json             # 账号邮箱 / Earthdata 用户名 / 保存路径 / 默认时间范围
+    ├── config.json             # 账号 / Earthdata 用户名 / 保存路径 / 时间范围 / 设置项
     ├── download_history.json   # 下载历史
     ├── search_cache.json       # 搜索结果缓存
     ├── aoi_library.json        # 用户自定义 AOI 库
+    ├── queue.json              # 下载队列持久化
     └── logs/                   # 下载日志（按天分文件）
 ```
 
@@ -98,6 +106,6 @@ python main.py
 
 ## 说明
 
-- 本地数据（账号配置、下载历史、缓存、AOI 库、日志）统一存于 `data/`，通过 `.gitignore` 排除，不纳入版本管理。
+- 本地数据（账号配置、下载历史、缓存、AOI 库、下载队列、日志）统一存于 `data/`，通过 `.gitignore` 排除，不纳入版本管理。
 - 建议使用全局 VPN 提升访问 ESA 服务器速度。
 - 扩展新数据源：在 `core/` 下新建文件继承 `DataSource` 基类，实现认证与搜索逻辑即可复用现有下载内核，无需改动 UI。

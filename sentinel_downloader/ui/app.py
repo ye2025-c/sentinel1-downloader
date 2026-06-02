@@ -19,12 +19,13 @@ import ttkbootstrap as ttkb
 
 from core.api import CopernicusAPI
 from core.s2_api import SentinelS2API
-from core.config import log_line
-from core.store import SearchCache
+from core.config import log_line, purge_old_logs
+from core.store import SearchCache, QueueStore
 from ui.tab_auth import build_auth_tab, load_config_into_ui
 from ui.tab_search import build_search_tab
-from ui.tab_download import build_download_tab
+from ui.tab_download import build_download_tab, render_queue
 from ui.tab_nasa import build_nasa_tab
+from ui.tab_settings import build_settings_tab
 
 # 主题：ttkbootstrap 自带的深色主题，换一个单词即可切换风格
 #   深色可选：superhero / darkly / cyborg / solar / vapor
@@ -63,6 +64,8 @@ class App(ttkb.Window):
         self._build_ui()
         load_config_into_ui(self)       # 填充各 Entry 控件
         SearchCache.clear_expired()     # 清理过期搜索缓存
+        purge_old_logs()                # 按设置清理超期日志
+        self._restore_queue()           # 恢复上次未完成的下载队列
 
     # ── 样式 ──────────────────────────────────
     def _setup_style(self):
@@ -171,20 +174,23 @@ class App(ttkb.Window):
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, padx=0, pady=0)
 
-        self.tab_auth   = ttk.Frame(nb)
-        self.tab_search = ttk.Frame(nb)
-        self.tab_dl     = ttk.Frame(nb)
-        self.tab_nasa   = ttk.Frame(nb)
+        self.tab_auth     = ttk.Frame(nb)
+        self.tab_search   = ttk.Frame(nb)
+        self.tab_dl       = ttk.Frame(nb)
+        self.tab_nasa     = ttk.Frame(nb)
+        self.tab_settings = ttk.Frame(nb)
 
-        nb.add(self.tab_auth,   text="  🔐 账号配置  ")
-        nb.add(self.tab_search, text="  🔍 搜索影像  ")
-        nb.add(self.tab_dl,     text="  ⬇  下载管理  ")
-        nb.add(self.tab_nasa,   text="  🛰 NASA 下载  ")
+        nb.add(self.tab_auth,     text="  🔐 账号配置  ")
+        nb.add(self.tab_search,   text="  🔍 搜索影像  ")
+        nb.add(self.tab_dl,       text="  ⬇  下载管理  ")
+        nb.add(self.tab_nasa,     text="  🛰 NASA 下载  ")
+        nb.add(self.tab_settings, text="  ⚙ 设置  ")
 
         build_auth_tab(self)
         build_search_tab(self)
         build_download_tab(self)
         build_nasa_tab(self)
+        build_settings_tab(self)
 
         # 状态栏
         self.status_var = tk.StringVar(value="就绪")
@@ -195,6 +201,22 @@ class App(ttkb.Window):
         tk.Frame(self, bg=C["BDR"], height=1).pack(fill="x", side="bottom")
         tk.Label(sb, textvariable=self.status_var, bg=C["BG3"], fg=C["DIS"],
                  font=(UI, 9), anchor="w").pack(side="left", padx=12, pady=4)
+
+    # ── 下载队列持久化（V4.1）─────────────────
+    def _restore_queue(self):
+        """启动时从 data/queue.json 恢复上次的下载队列并渲染。
+
+        QueueStore.load 已把残留的 downloading 降级为 waiting；这里统计
+        未完成（非 done）的数量并在状态栏提示。"""
+        self.queue = QueueStore.load()
+        render_queue(self)
+        pending = sum(1 for q in self.queue if q.get("status") != "done")
+        if pending:
+            self.set_status(f"已恢复 {pending} 个未完成下载任务")
+
+    def _persist_queue(self):
+        """把当前下载队列写盘（队列增删 / 状态变更后调用）。线程安全。"""
+        QueueStore.save(self.queue)
 
     # ── 跨 Tab 共享工具 ───────────────────────
     def _log(self, widget, msg, tag="info"):

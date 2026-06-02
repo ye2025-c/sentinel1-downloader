@@ -9,13 +9,23 @@
 
 import os
 import time
+import zipfile
 
 import requests
+
+from core.config import get_setting
+
+
+class IncompleteDownloadError(Exception):
+    """下载结束后完整性校验未通过（大小不足 / ZIP 结构损坏）。
+
+    归入"续传重试、不刷 Token"分支：保留已下文件，退避后用 Range 续传补齐。
+    """
 
 
 def download(api, product_id, product_name, save_dir,
              username, password, log_cb=None, prog_cb=None,
-             speed_cb=None, stop_event=None, max_retry=5):
+             speed_cb=None, stop_event=None, max_retry=None):
     """
     支持断点续传 / 失败重试。
 
@@ -37,6 +47,13 @@ def download(api, product_id, product_name, save_dir,
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, product_name + ".zip")
 
+    # 可调参数统一从设置读取（缺省回退默认，见 core/config.py:_DEFAULT_SETTINGS）
+    if max_retry is None:
+        max_retry = get_setting("max_retry")
+    connect_timeout  = get_setting("connect_timeout")
+    read_timeout     = get_setting("read_timeout")
+    verify_integrity = get_setting("verify_integrity")
+
     for attempt in range(1, max_retry + 1):
         try:
             api.refresh_if_needed(username, password)
@@ -48,7 +65,7 @@ def download(api, product_id, product_name, save_dir,
             head_resp = requests.head(
                 url,
                 headers=headers,
-                timeout=(15, 30),       # (connect, read)
+                timeout=(connect_timeout, 30),   # (connect, read)；HEAD 只取元数据
                 allow_redirects=True
             )
             server_size = int(head_resp.headers.get("content-length", 0))
@@ -75,7 +92,8 @@ def download(api, product_id, product_name, save_dir,
             # read_timeout=120s：两次 chunk 之间最长允许的空闲时间
             # 服务器一般在 60-90s 无数据后 RST，设 120s 是为了在此之前
             # 收到异常并进入重试，而不是被动等到系统层面报错
-            resp = requests.get(url, headers=headers, stream=True, timeout=(15, 120))
+            resp = requests.get(url, headers=headers, stream=True,
+                                 timeout=(connect_timeout, read_timeout))
 
             if resp.status_code == 416:
                 # 双重保险：416 时再次校验大小
@@ -86,7 +104,8 @@ def download(api, product_id, product_name, save_dir,
                                f"（本地 {actual_size}B vs 服务器 {server_size}B），重新下载", "warn")
                     existing = 0
                     headers.pop("Range", None)
-                    resp = requests.get(url, headers=headers, stream=True, timeout=(15, 120))
+                    resp = requests.get(url, headers=headers, stream=True,
+                                 timeout=(connect_timeout, read_timeout))
                 else:
                     if log_cb: log_cb("  文件已完整，跳过", "ok")
                     return True, save_path
@@ -138,6 +157,15 @@ def download(api, product_id, product_name, save_dir,
                     if total and prog_cb:
                         prog_cb(downloaded / total * 100)
 
+            # ── 完整性校验：服务器声明了大小却没下满 → 判不完整、续传重试 ──
+            final_size = os.path.getsize(save_path)
+            if server_size and final_size < server_size:
+                raise IncompleteDownloadError(
+                    f"文件不完整 {final_size}/{server_size} 字节")
+            # ZIP 结构校验（只读尾部中央目录，快）；可在设置关闭
+            if verify_integrity and not zipfile.is_zipfile(save_path):
+                raise IncompleteDownloadError("ZIP 结构校验未通过")
+
             if log_cb: log_cb(f"  ✅ 完成: {save_path}", "ok")
             if speed_cb: speed_cb(0)            # 完成后清零速度显示
             return True, save_path
@@ -146,15 +174,17 @@ def download(api, product_id, product_name, save_dir,
                 ConnectionError,
                 requests.exceptions.ConnectionError,
                 requests.exceptions.ChunkedEncodingError,
-                requests.exceptions.Timeout) as e:
-            # ── 连接层中断：服务器重置(10054) / 分块传输中断 / 读超时 ──────
+                requests.exceptions.Timeout,
+                IncompleteDownloadError) as e:
+            # ── 连接中断 / 完整性校验未过：服务器重置(10054) / 分块传输中断 /
+            #    读超时 / 下载不完整 ───────────────────────────────────────
             # 这类错误 Token 并未过期，刷新无意义；只需保留已下载部分、
             # 退避后断点续传重试。
             # 注意：requests.exceptions.ConnectionError 等并非内置 ConnectionError
             # 的子类，必须显式列出，否则会漏到下面的 Token 刷新分支。
             done_mb = os.path.getsize(save_path) / 1024**2 if os.path.exists(save_path) else 0
             if log_cb:
-                log_cb(f"  ⚠️ 第{attempt}次连接中断（{type(e).__name__}），"
+                log_cb(f"  ⚠️ 第{attempt}次传输中断/校验未过（{type(e).__name__}），"
                        f"已下载 {done_mb:.1f} MB 保留", "warn")
             if attempt < max_retry:
                 wait = min(10 * (2 ** (attempt - 1)), 120)   # 10s, 20s, 40s, 80s, 上限120s

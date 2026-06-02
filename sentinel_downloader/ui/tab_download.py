@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 
 from core.api import CopernicusAPI
+from core.config import get_setting
 from core.downloader import download as do_download
 from core.store import HistoryStore
 from core.aoi_manager import AoiManager
@@ -79,7 +80,7 @@ def build_download_tab(app):
     tk.Label(cbf, text="并行：", fg=C["DIS"], font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
     app.cmb_parallel = ttk.Combobox(cbf, values=["1", "2", "3", "4", "5"],
                                     state="readonly", width=3, font=(app.FONT_UI, 9))
-    app.cmb_parallel.set("3")
+    app.cmb_parallel.set(str(get_setting("parallel")))
     app.cmb_parallel.pack(side="left")
     tk.Label(cbf, text=" 景", fg=C["DIS"], font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
 
@@ -166,6 +167,7 @@ def _clear_queue(app):
     if app.queue and messagebox.askyesno("确认", "确定清空下载队列？"):
         app.queue.clear()
         render_queue(app)
+        app._persist_queue()
 
 
 def _remove_selected(app):
@@ -177,6 +179,7 @@ def _remove_selected(app):
         if idx < len(app.queue):
             del app.queue[idx]
     render_queue(app)
+    app._persist_queue()
 
 
 # ─────────────────────────────────────────────
@@ -261,6 +264,7 @@ def _start_download(app):
             HistoryStore.add(q["id"], name, q.get("size", ""), save_dir,
                              footprint=q.get("footprint", ""))
             q["status"] = "downloading"
+            app._persist_queue()                # 状态变更 → 持久化（崩溃后可恢复）
             app.after(0, lambda: render_queue(app))
 
             def _prog(pct):
@@ -289,6 +293,7 @@ def _start_download(app):
                     ok_cnt += 1
             q["status"] = "done" if ok else "error"
             HistoryStore.update_status(q["id"], "completed" if ok else "failed")
+            app._persist_queue()                # 状态变更 → 持久化
             app.after(0, lambda: render_queue(app))
             app.after(0, lambda: render_history(app))
 

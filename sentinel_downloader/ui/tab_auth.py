@@ -76,20 +76,33 @@ def build_auth_tab(app):
     ttk.Button(bf, text="💾  保存配置",
                command=lambda: _save_config(app)).pack(side="left")
 
-    # 提示
+    # 提示：两个数据源工作流不同，分组说明，避免混淆
     hint = ttk.LabelFrame(f, text=" 使用说明 ", padding=14)
     hint.pack(fill="x", padx=18, pady=(14, 0))
-    hints = [
-        "① 注册账号：dataspace.copernicus.eu  （免费注册）",
-        "② 填写账号 → 测试登录 → 保存配置",
-        "③ 切换「搜索影像」标签 → 设置条件 → 搜索",
-        "④ 勾选影像 → 加入队列 → 切换「下载管理」→ 开始下载",
-        "⑤ 脚本支持断点续传，中断后重新运行自动续传",
-        "⑥ 建议使用全局VPN，提升访问 ESA 服务器速度",
+    groups = [
+        ("【Sentinel · Copernicus】界面内检索 + 下载", [
+            "① 注册账号：dataspace.copernicus.eu（免费，S1/S2 同一账号）",
+            "② 填写 Copernicus 账号 → 测试登录 → 保存配置",
+            "③「搜索影像」标签 → 设置时间 / AOI / 参数 → 搜索",
+            "④ 勾选影像 → 加入队列 →「下载管理」→ 开始下载",
+        ]),
+        ("【NASA Earthdata】官网检索，软件只负责批量下载", [
+            "① 注册账号：urs.earthdata.nasa.gov（免费）",
+            "② 填写 Earthdata 账号 → 测试登录",
+            "③ 在 NASA 官网（如 Earthdata Search）勾选数据 → 导出 .txt 下载链接列表",
+            "④「NASA 下载」标签 → 导入并解析 .txt → 设置保存目录 → 开始下载",
+        ]),
     ]
-    for h in hints:
-        tk.Label(hint, text=h, fg=C["DIS"], font=(app.FONT_UI, 9),
-                 anchor="w").pack(fill="x", pady=1)
+    for title, steps in groups:
+        tk.Label(hint, text=title, fg=C["ACC"], font=(app.FONT_UI, 9, "bold"),
+                 anchor="w").pack(fill="x", pady=(4, 1))
+        for s in steps:
+            tk.Label(hint, text="    " + s, fg=C["DIS"], font=(app.FONT_UI, 9),
+                     anchor="w").pack(fill="x", pady=1)
+    tk.Label(hint,
+             text="※ 两者均支持断点续传，中断后重开自动续传；建议全局 VPN 提升访问速度。",
+             fg=C["DIS"], font=(app.FONT_UI, 8), wraplength=560,
+             anchor="w", justify="left").pack(fill="x", pady=(6, 0))
 
     # 登录日志
     app.auth_log = scrolledtext.ScrolledText(

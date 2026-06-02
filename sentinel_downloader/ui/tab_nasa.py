@@ -17,7 +17,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
-from core.config import log_line, save_config
+from core.config import log_line, save_config, get_setting
 from core.earthdata import (
     EarthdataSession, parse_url_list, filename_from_url,
     preauth, download_one,
@@ -68,7 +68,7 @@ def build_nasa_tab(app):
     app.cmb_nasa_delay = ttk.Combobox(row3, values=["0", "1", "2", "3", "5"],
                                       state="readonly", width=3,
                                       font=(app.FONT_UI, 9))
-    app.cmb_nasa_delay.set("2")
+    app.cmb_nasa_delay.set(str(get_setting("nasa_delay")))
     app.cmb_nasa_delay.pack(side="left")
     tk.Label(row3, text=" 秒（避免请求过密）", fg=C["DIS"],
              font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")

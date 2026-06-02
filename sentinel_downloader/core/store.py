@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-下载历史与搜索缓存（JSON 存储，无外部依赖）
+下载历史 / 搜索缓存 / 下载队列（JSON 存储，无外部依赖）
 ────────────────────────────────────────────────────────
 HistoryStore : 下载历史，记录每景的下载结果（data/download_history.json）
-SearchCache  : 搜索结果缓存，TTL=24h（data/search_cache.json）
+SearchCache  : 搜索结果缓存，TTL 由设置项 cache_ttl_hours 决定（data/search_cache.json）
+QueueStore   : 下载队列持久化，重启后可恢复未完成任务（data/queue.json，V4.1 引入）
 
 设计原则：
   - 零依赖：只用标准库 json / hashlib / threading / pathlib / datetime
@@ -19,10 +20,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Lock
 
-from core.config import DATA_DIR
+from core.config import DATA_DIR, get_setting
 
 _HISTORY_FILE      = Path(DATA_DIR) / "download_history.json"
 _SEARCH_CACHE_FILE = Path(DATA_DIR) / "search_cache.json"
+_QUEUE_FILE        = Path(DATA_DIR) / "queue.json"
 
 
 # ─────────────────────────────────────────────────────────
@@ -122,7 +124,7 @@ class SearchCache:
     仅缓存条件搜索（_do_search），按产品名搜索不缓存。
     """
     _lock     = Lock()
-    TTL_HOURS = 24
+    TTL_HOURS = 24          # 兜底默认；实际有效期读设置项 cache_ttl_hours
 
     @classmethod
     def _make_key(cls, params: dict) -> str:
@@ -175,7 +177,7 @@ class SearchCache:
             "results":      [asdict(p) for p in results],
             "result_count": len(results),
             "cached_at":    now.isoformat(timespec="seconds"),
-            "expires_at":   (now + timedelta(hours=cls.TTL_HOURS)).isoformat(timespec="seconds"),
+            "expires_at":   (now + timedelta(hours=get_setting("cache_ttl_hours"))).isoformat(timespec="seconds"),
         }
         with cls._lock:
             data = cls._load()
@@ -206,3 +208,48 @@ class SearchCache:
         """清空所有缓存条目。"""
         with cls._lock:
             cls._save({"version": "1.0", "entries": []})
+
+
+# ─────────────────────────────────────────────────────────
+#  下载队列持久化（V4.1）
+# ─────────────────────────────────────────────────────────
+class QueueStore:
+    """下载队列 JSON 持久化，线程安全。
+
+    队列项即 app.queue 的元素：{id, name, size, status, footprint}，
+    全部为可 JSON 序列化的基础类型，整列直接落盘。
+    """
+    _lock = Lock()
+
+    @classmethod
+    def save(cls, items: list):
+        """整列覆盖写入 data/queue.json。写盘失败静默，绝不影响主流程。"""
+        try:
+            with cls._lock:
+                _QUEUE_FILE.parent.mkdir(parents=True, exist_ok=True)
+                _QUEUE_FILE.write_text(
+                    json.dumps({"version": "1.0", "items": items},
+                               ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+        except Exception:
+            pass
+
+    @classmethod
+    def load(cls) -> list:
+        """读取队列。重启后残留的 downloading（线程已死）降级为 waiting，
+        下次"开始下载"时由文件级续传接上。读失败/缺文件返回空列表。"""
+        if not _QUEUE_FILE.exists():
+            return []
+        try:
+            items = json.loads(_QUEUE_FILE.read_text(encoding="utf-8")).get("items", [])
+        except Exception:
+            return []
+        for it in items:
+            if it.get("status") == "downloading":
+                it["status"] = "waiting"
+        return items
+
+    @classmethod
+    def clear(cls):
+        """清空持久化队列。"""
+        cls.save([])

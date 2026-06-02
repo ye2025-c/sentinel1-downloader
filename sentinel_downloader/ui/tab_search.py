@@ -747,6 +747,7 @@ def _add_to_queue(app):
         })
         added += 1
     render_queue(app)
+    app._persist_queue()        # 队列变更 → 持久化（V4.1）
     render_results(app)
     messagebox.showinfo("✅", f"已添加 {added} 景到下载队列")
 

@@ -35,16 +35,21 @@ class Product:
     size_gb: float           # 文件大小（GB）
     online: bool             # True=在线可直接下载，False=归档
     footprint: str = ""      # 影像覆盖范围 WKT（来自 GeoFootprint，V3.3 引入）
+    cloud_cover: float = -1.0  # 云量百分比（S2 专用，-1 表示 N/A）
+    tile_id: str = ""          # MGRS Tile ID（S2 专用，如 T50TML）
 
     # ── 展示辅助 ─────────────────────────────────────────────
     @property
     def size_str(self) -> str:
-        """队列 / 表格用的大小文案，如 '1.7 GB'。"""
         return f"{self.size_gb:.1f} GB"
 
     @property
     def online_str(self) -> str:
         return "✓在线" if self.online else "归档"
+
+    @property
+    def cloud_cover_str(self) -> str:
+        return f"{self.cloud_cover:.0f}%" if self.cloud_cover >= 0 else "—"
 
     # ── 解析辅助 ────────────────────────────────────────────
     @staticmethod
@@ -79,37 +84,62 @@ class Product:
         # 感测时间："2025-07-20T12:34:56.000Z" → "2025-07-20 12:34"
         acq = raw.get("ContentDate", {}).get("Start", "")[:16].replace("T", " ")
 
-        # 平台：按名称前缀
+        # 平台：按名称前缀（兼容 S1 / S2）
         if   name.startswith("S1A"): platform = "S1A"
+        elif name.startswith("S1B"): platform = "S1B"
         elif name.startswith("S1C"): platform = "S1C"
-        else:                         platform = "S1B"
+        elif name.startswith("S2A"): platform = "S2A"
+        elif name.startswith("S2B"): platform = "S2B"
+        elif name.startswith("S2C"): platform = "S2C"
+        else:                         platform = name[:3] if len(name) >= 3 else "—"
+
+        is_s2 = platform.startswith("S2")
 
         # Attributes 展开为 {名称: 值}
         attrs = {a["Name"]: a.get("Value", "—")
                  for a in raw.get("Attributes", []) if "Name" in a}
 
-        pol = attrs.get("polarisationChannels", "—")
-        if pol == "—":   # 退回按文件名推断
-            pol = "VV&VH" if "DV" in name else ("HH&HV" if "DH" in name else "—")
-
         orbit_dir = attrs.get("orbitDirection", "—")
         orbit_dir = _ORBIT_SHORT.get(orbit_dir, orbit_dir)
 
         size_bytes = raw.get("ContentLength", _DEFAULT_SIZE_BYTES)
+        footprint  = cls._geojson_to_wkt(raw.get("GeoFootprint", {}))
 
-        footprint = cls._geojson_to_wkt(raw.get("GeoFootprint", {}))
+        if is_s2:
+            # S2A_MSIL2A_20250723T... → mode = L2A / L1C
+            mode = "L2A" if "MSIL2A" in name else ("L1C" if "MSIL1C" in name else "MSI")
+            pol  = "—"
+            # tile_id：产品名第 6 段，如 T50TML
+            parts   = name.split("_")
+            tile_id = parts[5] if len(parts) > 5 else ""
+            try:
+                cloud_cover = float(attrs.get("cloudCover", -1))
+            except (ValueError, TypeError):
+                cloud_cover = -1.0
+            # S2 默认大小约 800 MB
+            if size_bytes == _DEFAULT_SIZE_BYTES:
+                size_bytes = 800 * 1024 * 1024
+        else:
+            mode  = attrs.get("operationalMode", "—")
+            pol   = attrs.get("polarisationChannels", "—")
+            if pol == "—":
+                pol = "VV&VH" if "DV" in name else ("HH&HV" if "DH" in name else "—")
+            tile_id     = ""
+            cloud_cover = -1.0
 
         return cls(
-            product_id     = raw.get("Id", ""),
-            name           = name,
-            acquisition_time = acq,
-            platform       = platform,
-            mode           = attrs.get("operationalMode", "—"),
-            polarization   = pol,
-            orbit_direction= orbit_dir,
-            relative_orbit = str(attrs.get("relativeOrbitNumber", "—")),
-            absolute_orbit = str(attrs.get("absoluteOrbitNumber", "—")),
-            size_gb        = size_bytes / 1024 ** 3,
-            online         = bool(raw.get("Online", True)),
-            footprint      = footprint,
+            product_id      = raw.get("Id", ""),
+            name            = name,
+            acquisition_time= acq,
+            platform        = platform,
+            mode            = mode,
+            polarization    = pol,
+            orbit_direction = orbit_dir,
+            relative_orbit  = str(attrs.get("relativeOrbitNumber", "—")),
+            absolute_orbit  = str(attrs.get("absoluteOrbitNumber", "—")),
+            size_gb         = size_bytes / 1024 ** 3,
+            online          = bool(raw.get("Online", True)),
+            footprint       = footprint,
+            cloud_cover     = cloud_cover,
+            tile_id         = tile_id,
         )

@@ -18,6 +18,7 @@ from datetime import datetime
 import ttkbootstrap as ttkb
 
 from core.api import CopernicusAPI
+from core.s2_api import SentinelS2API
 from core.config import log_line
 from core.store import SearchCache
 from ui.tab_auth import build_auth_tab, load_config_into_ui
@@ -49,6 +50,7 @@ class App(ttkb.Window):
 
         # ── 共享状态（各 Tab 通过 app.xxx 访问）──────────────────────
         self.api            = CopernicusAPI()
+        self.api_s2         = SentinelS2API()
         self.search_results = []        # 搜索结果
         self.queue          = []        # 下载队列  [{id, name, size, status}]
         self.downloading    = False

@@ -13,7 +13,7 @@ import tkinter as tk
 from datetime import datetime
 from tkinter import ttk, messagebox, filedialog
 
-from core.config import PRODUCT_TYPES
+from core.config import PRODUCT_TYPES, S2_PRODUCT_TYPES
 from core.store import HistoryStore, SearchCache
 from ui.aoi_panel import build_aoi_section
 from ui.tab_download import render_queue
@@ -54,6 +54,21 @@ def build_search_tab(app):
         canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
     canvas.bind_all("<MouseWheel>", on_mousewheel)
 
+    # 数据源选择
+    app.datasource_var = tk.StringVar(value="S1")
+    dsbox = ttk.LabelFrame(left, text=" 数据源 ", padding=8)
+    dsbox.pack(fill="x", pady=(0, 8))
+    ds_row = ttk.Frame(dsbox)
+    ds_row.pack(anchor="w")
+    for ds_val, ds_label in [("S1", "Sentinel-1（SAR）"), ("S2", "Sentinel-2（光学）")]:
+        tk.Radiobutton(
+            ds_row, text=ds_label, variable=app.datasource_var, value=ds_val,
+            bg=C["BG"], fg=C["FG"], selectcolor=C["BG2"],
+            activebackground=C["BG"], activeforeground=C["ACC"],
+            font=(app.FONT_UI, 9),
+            command=lambda: _switch_datasource(app)
+        ).pack(side="left", padx=(0, 12))
+
     # 时间
     tbox = ttk.LabelFrame(left, text=" 时间范围 ", padding=10)
     tbox.pack(fill="x", pady=(0, 8))
@@ -71,18 +86,22 @@ def build_search_tab(app):
     # AOI（由 aoi_panel.py 构建，含列表 / 文件导入 / 地图画框）
     build_aoi_section(app, left)
 
-    # 产品参数
-    pbox = ttk.LabelFrame(left, text=" 产品参数 ", padding=10)
-    pbox.pack(fill="x", pady=(0, 8))
+    # 产品参数容器（S1 / S2 面板在此切换）
+    params_container = ttk.Frame(left)
+    params_container.pack(fill="x", pady=(0, 8))
 
-    tk.Label(pbox, text="产品类型：", font=(app.FONT_UI, 9)).pack(anchor="w")
-    app.cmb_type = ttk.Combobox(pbox, values=list(PRODUCT_TYPES.keys()),
+    # ── S1 参数面板 ──────────────────────────────────────────
+    app.pbox_s1 = ttk.LabelFrame(params_container, text=" 产品参数 (S1) ", padding=10)
+    app.pbox_s1.pack(fill="x")   # 默认显示
+
+    tk.Label(app.pbox_s1, text="产品类型：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.cmb_type = ttk.Combobox(app.pbox_s1, values=list(PRODUCT_TYPES.keys()),
                                 state="readonly", font=(app.FONT_UI, 9))
     app.cmb_type.current(0)
     app.cmb_type.pack(fill="x", pady=(2, 8))
 
-    tk.Label(pbox, text="卫星平台：", font=(app.FONT_UI, 9)).pack(anchor="w")
-    pf2 = ttk.Frame(pbox)
+    tk.Label(app.pbox_s1, text="卫星平台：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    pf2 = ttk.Frame(app.pbox_s1)
     pf2.pack(anchor="w", pady=(2, 8))
     app.var_s1a = tk.BooleanVar(value=True)
     app.var_s1b = tk.BooleanVar(value=True)
@@ -91,54 +110,90 @@ def build_search_tab(app):
     ttk.Checkbutton(pf2, text="S1B", variable=app.var_s1b).pack(side="left", padx=(0, 8))
     ttk.Checkbutton(pf2, text="S1C", variable=app.var_s1c).pack(side="left")
 
-    # ── 轨道方向（服务端过滤）────────────────────────────────
-    tk.Label(pbox, text="轨道方向：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    tk.Label(app.pbox_s1, text="轨道方向：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_orbit = ttk.Combobox(
-        pbox,
-        values=["不限", "升轨 ASCENDING", "降轨 DESCENDING"],
+        app.pbox_s1, values=["不限", "升轨 ASCENDING", "降轨 DESCENDING"],
         state="readonly", font=(app.FONT_UI, 9))
     app.cmb_orbit.current(0)
     app.cmb_orbit.pack(fill="x", pady=(2, 8))
 
-    # ── 极化方式（服务端过滤）────────────────────────────────
-    tk.Label(pbox, text="极化方式：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    tk.Label(app.pbox_s1, text="极化方式：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_pol = ttk.Combobox(
-        pbox,
+        app.pbox_s1,
         values=["不限", "VV&VH（双极化）", "VV（单极化）",
                 "VH（单极化）", "HH&HV（双极化）", "HH（单极化）"],
         state="readonly", font=(app.FONT_UI, 9))
     app.cmb_pol.current(0)
     app.cmb_pol.pack(fill="x", pady=(2, 8))
 
-    # ── 相对轨道号（服务端过滤，留空=不限）──────────────────
-    tk.Label(pbox, text="相对轨道号（留空=不限）：", font=(app.FONT_UI, 9)).pack(anchor="w")
-    app.ent_orbit_num = ttk.Entry(pbox, width=10, font=(app.FONT_UI, 9))
+    tk.Label(app.pbox_s1, text="相对轨道号（留空=不限）：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.ent_orbit_num = ttk.Entry(app.pbox_s1, width=10, font=(app.FONT_UI, 9))
     app.ent_orbit_num.pack(anchor="w", pady=(2, 8))
 
-    # ── 成像模式（服务端过滤）────────────────────────────────
-    tk.Label(pbox, text="成像模式：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    tk.Label(app.pbox_s1, text="成像模式：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_mode = ttk.Combobox(
-        pbox,
+        app.pbox_s1,
         values=["不限", "IW（干涉宽幅，推荐）", "EW（超宽幅）", "SM（条带）", "WV（波浪）"],
         state="readonly", font=(app.FONT_UI, 9))
     app.cmb_mode.current(0)
     app.cmb_mode.pack(fill="x", pady=(2, 8))
 
-    # ── 绝对轨道号（服务端过滤，逗号分隔多个，留空=不限）─────
-    tk.Label(pbox, text="绝对轨道号（逗号分隔，留空=不限）：", font=(app.FONT_UI, 9)).pack(anchor="w")
-    app.ent_abs_orbit = ttk.Entry(pbox, width=20, font=(app.FONT_UI, 9))
+    tk.Label(app.pbox_s1, text="绝对轨道号（逗号分隔，留空=不限）：",
+             font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.ent_abs_orbit = ttk.Entry(app.pbox_s1, width=20, font=(app.FONT_UI, 9))
     app.ent_abs_orbit.pack(anchor="w", pady=(2, 8))
 
-    # ── 仅在线产品（服务端过滤）──────────────────────────────
     app.var_online = tk.BooleanVar(value=True)
-    ttk.Checkbutton(pbox, text="仅显示在线产品（跳过归档）",
+    ttk.Checkbutton(app.pbox_s1, text="仅显示在线产品（跳过归档）",
                     variable=app.var_online).pack(anchor="w", pady=(0, 8))
 
-    tk.Label(pbox, text="最大返回数：", font=(app.FONT_UI, 9)).pack(anchor="w")
-    app.cmb_max = ttk.Combobox(pbox, values=["20", "50", "100", "200"],
+    tk.Label(app.pbox_s1, text="最大返回数：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.cmb_max = ttk.Combobox(app.pbox_s1, values=["20", "50", "100", "200"],
                                state="readonly", width=8, font=(app.FONT_UI, 9))
     app.cmb_max.set("50")
     app.cmb_max.pack(anchor="w", pady=(2, 0))
+
+    # ── S2 参数面板（默认隐藏）───────────────────────────────
+    app.pbox_s2 = ttk.LabelFrame(params_container, text=" 产品参数 (S2) ", padding=10)
+    # 不 pack，切换数据源时才显示
+
+    tk.Label(app.pbox_s2, text="处理级别：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.cmb_s2_level = ttk.Combobox(app.pbox_s2, values=list(S2_PRODUCT_TYPES.keys()),
+                                    state="readonly", font=(app.FONT_UI, 9))
+    app.cmb_s2_level.current(0)
+    app.cmb_s2_level.pack(fill="x", pady=(2, 8))
+
+    tk.Label(app.pbox_s2, text="最大云量 (%)：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.cmb_s2_cloud = ttk.Combobox(
+        app.pbox_s2, values=["不限", "10", "20", "30", "50", "80"],
+        state="readonly", font=(app.FONT_UI, 9), width=8)
+    app.cmb_s2_cloud.set("30")
+    app.cmb_s2_cloud.pack(anchor="w", pady=(2, 8))
+
+    tk.Label(app.pbox_s2, text="卫星平台：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    pf_s2 = ttk.Frame(app.pbox_s2)
+    pf_s2.pack(anchor="w", pady=(2, 8))
+    app.var_s2a = tk.BooleanVar(value=True)
+    app.var_s2b = tk.BooleanVar(value=True)
+    app.var_s2c = tk.BooleanVar(value=True)
+    ttk.Checkbutton(pf_s2, text="S2A", variable=app.var_s2a).pack(side="left", padx=(0, 8))
+    ttk.Checkbutton(pf_s2, text="S2B", variable=app.var_s2b).pack(side="left", padx=(0, 8))
+    ttk.Checkbutton(pf_s2, text="S2C", variable=app.var_s2c).pack(side="left")
+
+    tk.Label(app.pbox_s2, text="Tile ID（如 T50TML，留空=不限）：",
+             font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.ent_s2_tile = ttk.Entry(app.pbox_s2, width=12, font=(app.FONT_UI, 9))
+    app.ent_s2_tile.pack(anchor="w", pady=(2, 8))
+
+    app.var_s2_online = tk.BooleanVar(value=True)
+    ttk.Checkbutton(app.pbox_s2, text="仅显示在线产品（跳过归档）",
+                    variable=app.var_s2_online).pack(anchor="w", pady=(0, 8))
+
+    tk.Label(app.pbox_s2, text="最大返回数：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.cmb_s2_max = ttk.Combobox(app.pbox_s2, values=["20", "50", "100", "200"],
+                                  state="readonly", width=8, font=(app.FONT_UI, 9))
+    app.cmb_s2_max.set("50")
+    app.cmb_s2_max.pack(anchor="w", pady=(2, 0))
 
     # 搜索按钮
     bf = ttk.Frame(left)
@@ -206,9 +261,9 @@ def build_search_tab(app):
     # 输入即过滤（结果已在内存，纯客户端，无网络请求）
     app.filter_var.trace_add("write", lambda *a: render_results(app))
 
-    # 结果 Treeview（横向可滚动）
+    # 结果 Treeview（横向可滚动，含 S2 云量列）
     cols = ("sel", "name", "date", "platform", "mode", "pol", "orbit_dir",
-            "rel_orbit", "abs_orbit", "size", "online")
+            "rel_orbit", "abs_orbit", "size", "cloud", "online")
 
     tree_frame = ttk.Frame(right)
     tree_frame.pack(fill="both", expand=True)
@@ -219,23 +274,25 @@ def build_search_tab(app):
     app.tree.heading("name",      text="产品名称")
     app.tree.heading("date",      text="感测时间 (UTC)")
     app.tree.heading("platform",  text="平台")
-    app.tree.heading("mode",      text="模式")
+    app.tree.heading("mode",      text="模式/级别")
     app.tree.heading("pol",       text="极化")
     app.tree.heading("orbit_dir", text="轨道")
     app.tree.heading("rel_orbit", text="相对轨道号")
     app.tree.heading("abs_orbit", text="绝对轨道号")
     app.tree.heading("size",      text="大小")
+    app.tree.heading("cloud",     text="云量")
     app.tree.heading("online",    text="状态")
     app.tree.column("sel",       width=30,  anchor="center", stretch=False)
     app.tree.column("name",      width=340, anchor="w",      stretch=False)
     app.tree.column("date",      width=158, anchor="center", stretch=False)
     app.tree.column("platform",  width=50,  anchor="center", stretch=False)
-    app.tree.column("mode",      width=50,  anchor="center", stretch=False)
+    app.tree.column("mode",      width=55,  anchor="center", stretch=False)
     app.tree.column("pol",       width=70,  anchor="center", stretch=False)
     app.tree.column("orbit_dir", width=60,  anchor="center", stretch=False)
     app.tree.column("rel_orbit", width=92,  anchor="center", stretch=False)
     app.tree.column("abs_orbit", width=92,  anchor="center", stretch=False)
     app.tree.column("size",      width=65,  anchor="center", stretch=False)
+    app.tree.column("cloud",     width=55,  anchor="center", stretch=False)
     app.tree.column("online",    width=65,  anchor="center", stretch=False)
     app.tree.tag_configure("even", background=C["BG2"])
     app.tree.tag_configure("odd",  background=C["ALT"])
@@ -287,7 +344,25 @@ def _deselect_all(app):
         app.tree.set(iid, "sel", "")
 
 
+def _switch_datasource(app):
+    """切换 S1 / S2 参数面板显示。"""
+    if app.datasource_var.get() == "S2":
+        app.pbox_s1.pack_forget()
+        app.pbox_s2.pack(fill="x")
+    else:
+        app.pbox_s2.pack_forget()
+        app.pbox_s1.pack(fill="x")
+
+
 def _do_search(app):
+    """根据当前数据源分发到对应搜索函数。"""
+    if app.datasource_var.get() == "S2":
+        _do_search_s2(app)
+    else:
+        _do_search_s1(app)
+
+
+def _do_search_s1(app):
     if not app.api.token:
         messagebox.showwarning("提示", "请先在「账号配置」标签页登录")
         return
@@ -381,6 +456,74 @@ def _do_search(app):
         except Exception as e:
             app.after(0, lambda: messagebox.showerror("搜索失败", str(e)))
             app.after(0, lambda: app.set_status(f"搜索失败: {e}"))
+            app.after(0, lambda: app.lbl_count.config(text="搜索失败"))
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def _do_search_s2(app):
+    if not app.api_s2.token and not app.api.token:
+        messagebox.showwarning("提示", "请先在「账号配置」标签页登录")
+        return
+    # 复用 S1 的 token（同一 Copernicus 账号）
+    if not app.api_s2.token and app.api.token:
+        app.api_s2.token      = app.api.token
+        app.api_s2.token_time = app.api.token_time
+
+    wkt = app.ent_wkt.get("1.0", "end").strip()
+    if not wkt:
+        messagebox.showwarning("提示", "请选择或输入研究区 WKT")
+        return
+
+    date_from   = app.ent_from.get().strip()
+    date_to     = app.ent_to.get().strip()
+    max_results = int(app.cmb_s2_max.get())
+    online_only = app.var_s2_online.get()
+
+    platforms = []
+    if app.var_s2a.get(): platforms.append("S2A")
+    if app.var_s2b.get(): platforms.append("S2B")
+    if app.var_s2c.get(): platforms.append("S2C")
+
+    level_sel       = app.cmb_s2_level.get()
+    processing_level = S2_PRODUCT_TYPES.get(level_sel)
+
+    cloud_raw       = app.cmb_s2_cloud.get()
+    cloud_cover_max = None if cloud_raw == "不限" else float(cloud_raw)
+
+    tile_id = app.ent_s2_tile.get().strip() or None
+
+    cache_params = {
+        "datasource": "S2",
+        "wkt": wkt, "date_from": date_from, "date_to": date_to,
+        "max_results": max_results, "platforms": sorted(platforms),
+        "processing_level": processing_level,
+        "cloud_cover_max": cloud_cover_max,
+        "tile_id": tile_id, "online_only": online_only,
+    }
+
+    app.lbl_count.config(text="搜索中（S2）...")
+    app.set_status("正在搜索 Sentinel-2...")
+
+    def _run():
+        try:
+            cached = SearchCache.get(cache_params)
+            if cached is not None:
+                app.search_results = cached
+                app.after(0, lambda: render_results(app, from_cache=True))
+                return
+            results = app.api_s2.search(
+                wkt, date_from, date_to, max_results=max_results,
+                platforms=platforms, cloud_cover_max=cloud_cover_max,
+                tile_id=tile_id, online_only=online_only,
+                processing_level=processing_level,
+            )
+            SearchCache.set(cache_params, results)
+            app.search_results = results
+            app.after(0, lambda: render_results(app))
+        except Exception as e:
+            app.after(0, lambda: messagebox.showerror("S2 搜索失败", str(e)))
+            app.after(0, lambda: app.set_status(f"S2 搜索失败: {e}"))
             app.after(0, lambda: app.lbl_count.config(text="搜索失败"))
 
     threading.Thread(target=_run, daemon=True).start()
@@ -480,7 +623,8 @@ def render_results(app, from_cache=False):
                         values=("", p.name, p.acquisition_time + " UTC",
                                 p.platform, p.mode, p.polarization,
                                 p.orbit_direction, p.relative_orbit, p.absolute_orbit,
-                                f"{p.size_gb:.1f}GB", p.online_str + dl_mark + inq),
+                                f"{p.size_gb:.1f}GB", p.cloud_cover_str,
+                                p.online_str + dl_mark + inq),
                         tags=(tag,))
 
         # 累计统计
@@ -566,13 +710,14 @@ def _export_csv(app):
     try:
         with open(path, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.writer(f)
-            w.writerow(["产品名称", "感测时间(UTC)", "平台", "成像模式", "极化",
-                        "轨道方向", "相对轨道号", "绝对轨道号", "大小(GB)", "状态", "产品ID"])
+            w.writerow(["产品名称", "感测时间(UTC)", "平台", "模式/级别", "极化",
+                        "轨道方向", "相对轨道号", "绝对轨道号", "大小(GB)", "云量(%)", "状态", "产品ID"])
             for p in displayed:
+                cloud = f"{p.cloud_cover:.1f}" if p.cloud_cover >= 0 else ""
                 w.writerow([p.name, p.acquisition_time, p.platform, p.mode,
                             p.polarization, p.orbit_direction, p.relative_orbit,
-                            p.absolute_orbit, f"{p.size_gb:.2f}", p.online_str,
-                            p.product_id])
+                            p.absolute_orbit, f"{p.size_gb:.2f}", cloud,
+                            p.online_str, p.product_id])
         app.set_status(f"已导出 {len(displayed)} 景到 {path}")
         messagebox.showinfo("✅ 导出成功", f"已导出 {len(displayed)} 景到：\n{path}")
     except Exception as e:

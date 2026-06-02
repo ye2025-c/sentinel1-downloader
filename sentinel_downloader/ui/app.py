@@ -41,11 +41,11 @@ def _darken(hexcolor, f=0.82):
 class App(ttkb.Window):
     def __init__(self):
         super().__init__(
-            title="Sentinel-1 批量下载工具  |  海河25·7洪涝监测",
+            title="Sentinel 批量下载工具  |  海河25·7洪涝监测",
             themename=THEME,
-            size=(1050, 760),
+            size=(1130, 780),
         )
-        self.minsize(900, 650)
+        self.minsize(980, 660)
         self.resizable(True, True)
 
         # ── 共享状态（各 Tab 通过 app.xxx 访问）──────────────────────

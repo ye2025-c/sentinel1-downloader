@@ -25,26 +25,31 @@ def build_search_tab(app):
     C = app.colors
     f = app.tab_search
 
-    # 左：条件面板（带滚动条）
-    left_container = ttk.Frame(f, width=340)
-    left_container.pack(side="left", fill="y", padx=(12, 6), pady=12)
-    left_container.pack_propagate(False)
+    # 顶层：左右可拖动分隔（PanedWindow），用户可自由调整左右宽度比例
+    paned = ttk.PanedWindow(f, orient="horizontal")
+    paned.pack(fill="both", expand=True, padx=8, pady=8)
+
+    # 左：条件面板（带纵向滚动条）
+    left_container = ttk.Frame(paned, width=380)
+    paned.add(left_container, weight=0)
 
     # 创建 Canvas 和 Scrollbar
-    canvas = tk.Canvas(left_container, bg=C["BG"], highlightthickness=0, width=320)
+    canvas = tk.Canvas(left_container, bg=C["BG"], highlightthickness=0)
     scrollbar = ttk.Scrollbar(left_container, orient="vertical", command=canvas.yview)
     canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
     canvas.configure(yscrollcommand=scrollbar.set)
 
     # 在 Canvas 中创建内容框架
-    left = ttk.Frame(canvas, width=320)
-    canvas.create_window((0, 0), window=left, anchor="nw", width=320)
-
-    def on_canvas_configure(event):
-        canvas.configure(scrollregion=canvas.bbox("all"))
+    left = ttk.Frame(canvas)
+    _left_win = canvas.create_window((0, 0), window=left, anchor="nw")
 
     def on_frame_configure(event):
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
+    def on_canvas_configure(event):
+        # 关键：内容宽度跟随 Canvas 实际宽度，填满不留白、随分隔条拉伸
+        canvas.itemconfigure(_left_win, width=event.width)
         canvas.configure(scrollregion=canvas.bbox("all"))
 
     left.bind("<Configure>", on_frame_configure)
@@ -54,6 +59,15 @@ def build_search_tab(app):
     def on_mousewheel(event):
         canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
     canvas.bind_all("<MouseWheel>", on_mousewheel)
+
+    # 初始分隔位置 ~380px；窗口首次显示后设置一次
+    def _init_sash(event=None):
+        try:
+            if paned.sashpos(0) < 50:
+                paned.sashpos(0, 380)
+        except Exception:
+            pass
+    paned.bind("<Map>", _init_sash)
 
     # 数据源选择
     app.datasource_var = tk.StringVar(value="S1")
@@ -68,7 +82,7 @@ def build_search_tab(app):
             activebackground=C["BG"], activeforeground=C["ACC"],
             font=(app.FONT_UI, 9),
             command=lambda: _switch_datasource(app)
-        ).pack(side="left", padx=(0, 12))
+        ).pack(side="left", padx=(0, 16))
 
     # 时间
     tbox = ttk.LabelFrame(left, text=" 时间范围 ", padding=10)
@@ -186,6 +200,16 @@ def build_search_tab(app):
     app.ent_s2_tile = ttk.Entry(app.pbox_s2, width=12, font=(app.FONT_UI, 9))
     app.ent_s2_tile.pack(anchor="w", pady=(2, 8))
 
+    tk.Label(app.pbox_s2, text="相对轨道号（留空=不限）：",
+             font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.ent_s2_orbit = ttk.Entry(app.pbox_s2, width=10, font=(app.FONT_UI, 9))
+    app.ent_s2_orbit.pack(anchor="w", pady=(2, 8))
+
+    tk.Label(app.pbox_s2, text="处理基线（如 05.00，留空=不限）：",
+             font=(app.FONT_UI, 9)).pack(anchor="w")
+    app.ent_s2_baseline = ttk.Entry(app.pbox_s2, width=10, font=(app.FONT_UI, 9))
+    app.ent_s2_baseline.pack(anchor="w", pady=(2, 8))
+
     app.var_s2_online = tk.BooleanVar(value=True)
     ttk.Checkbutton(app.pbox_s2, text="仅显示在线产品（跳过归档）",
                     variable=app.var_s2_online).pack(anchor="w", pady=(0, 8))
@@ -202,9 +226,9 @@ def build_search_tab(app):
     ttk.Button(bf, text="🔍  执行搜索", style="Accent.TButton",
                command=lambda: _do_search(app)).pack(fill="x")
 
-    # 右：结果列表
-    right = ttk.Frame(f)
-    right.pack(side="left", fill="both", expand=True, padx=(0, 12), pady=12)
+    # 右：结果列表（随分隔条拉伸，weight=1 吸收多余空间）
+    right = ttk.Frame(paned)
+    paned.add(right, weight=1)
 
     # ── 名称搜索栏（官网复制文件名直接搜索）────────────────────────
     nsf = ttk.LabelFrame(right, text=" 📋 按产品名搜索（官网复制粘贴）", padding=8)
@@ -496,6 +520,11 @@ def _do_search_s2(app):
 
     tile_id = app.ent_s2_tile.get().strip() or None
 
+    rel_orbit_str = app.ent_s2_orbit.get().strip()
+    relative_orbit = int(rel_orbit_str) if rel_orbit_str.isdigit() else None
+
+    processing_baseline = app.ent_s2_baseline.get().strip() or None
+
     cache_params = {
         "datasource": "S2",
         "wkt": wkt, "date_from": date_from, "date_to": date_to,
@@ -503,6 +532,8 @@ def _do_search_s2(app):
         "processing_level": processing_level,
         "cloud_cover_max": cloud_cover_max,
         "tile_id": tile_id, "online_only": online_only,
+        "relative_orbit": relative_orbit,
+        "processing_baseline": processing_baseline,
     }
 
     app.lbl_count.config(text="搜索中（S2）...")
@@ -520,6 +551,8 @@ def _do_search_s2(app):
                 platforms=platforms, cloud_cover_max=cloud_cover_max,
                 tile_id=tile_id, online_only=online_only,
                 processing_level=processing_level,
+                relative_orbit=relative_orbit,
+                processing_baseline=processing_baseline,
             )
             SearchCache.set(cache_params, results)
             app.search_results = results

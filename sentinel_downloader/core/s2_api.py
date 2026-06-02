@@ -21,20 +21,28 @@ class SentinelS2API(CopernicusAPI):
 
     def search(self, wkt, date_from, date_to, max_results=100,
                platforms=None, cloud_cover_max=None, tile_id=None,
-               online_only=False, processing_level=None):
+               online_only=False, processing_level=None,
+               relative_orbit=None, processing_baseline=None):
         """
         参数说明
         --------
-        cloud_cover_max  : float | None  最大云量百分比（0-100），None=不限
-        tile_id          : str | None    MGRS Tile，如 "T50TML"，None=不限
-        online_only      : bool          True=仅在线产品
-        processing_level : str | None    "S2MSI2A" / "S2MSI1C" / None=不限
-        platforms        : list[str]     如 ["S2A","S2B"]，客户端过滤
+        cloud_cover_max     : float | None  最大云量百分比（0-100），None=不限
+        tile_id             : str | None    MGRS Tile，如 "T50TML"，None=不限
+        online_only         : bool          True=仅在线产品
+        processing_level    : str | None    "S2MSI2A" / "S2MSI1C" / None=不限
+        relative_orbit      : int | None    相对轨道号（服务端过滤）
+        processing_baseline : str | None    处理基线版本，如 "05.00"（服务端过滤）
+        platforms           : list[str]     如 ["S2A","S2B"]，客户端过滤
         """
         def _str_attr(name, value):
             return (f"Attributes/OData.CSC.StringAttribute/any("
                     f"att:att/Name eq '{name}' and "
                     f"att/OData.CSC.StringAttribute/Value eq '{value}')")
+
+        def _int_attr(name, value):
+            return (f"Attributes/OData.CSC.IntegerAttribute/any("
+                    f"att:att/Name eq '{name}' and "
+                    f"att/OData.CSC.IntegerAttribute/Value eq {value})")
 
         def _dbl_attr_lt(name, value):
             return (f"Attributes/OData.CSC.DoubleAttribute/any("
@@ -62,6 +70,17 @@ class SentinelS2API(CopernicusAPI):
         if tile_id and tile_id.strip():
             clean_tile = tile_id.strip().upper().lstrip("T")
             filters.append(_str_attr("tileId", clean_tile))
+
+        # ── 相对轨道号 ────────────────────────────────────────
+        if relative_orbit is not None:
+            try:
+                filters.append(_int_attr("relativeOrbitNumber", int(relative_orbit)))
+            except (ValueError, TypeError):
+                pass
+
+        # ── 处理基线 ──────────────────────────────────────────
+        if processing_baseline and processing_baseline.strip():
+            filters.append(_str_attr("processingBaseline", processing_baseline.strip()))
 
         # ── 仅在线产品 ────────────────────────────────────────
         if online_only:

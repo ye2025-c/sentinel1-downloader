@@ -24,6 +24,7 @@ from core.store import SearchCache
 from ui.tab_auth import build_auth_tab, load_config_into_ui
 from ui.tab_search import build_search_tab
 from ui.tab_download import build_download_tab
+from ui.tab_nasa import build_nasa_tab
 
 # 主题：ttkbootstrap 自带的深色主题，换一个单词即可切换风格
 #   深色可选：superhero / darkly / cyborg / solar / vapor
@@ -157,9 +158,13 @@ class App(ttkb.Window):
         tk.Label(top, text="🛰  Sentinel-1 批量下载工具",
                  bg=C["BG3"], fg=C["ACC"],
                  font=(UI, 14, "bold")).pack(side="left", padx=18, pady=12)
-        self.lbl_token = tk.Label(top, text="● 未登录", bg=C["BG3"], fg=C["DIS"],
-                                  font=(UI, 10))
-        self.lbl_token.pack(side="right", padx=18)
+        # 顶栏登录状态：CDSE 与 NASA 各一个指示（从左到右 CDSE | NASA）
+        self.lbl_token_nasa = tk.Label(top, text="NASA ● 未登录", bg=C["BG3"],
+                                       fg=C["DIS"], font=(UI, 10))
+        self.lbl_token_nasa.pack(side="right", padx=(8, 18))
+        self.lbl_token = tk.Label(top, text="CDSE ● 未登录", bg=C["BG3"],
+                                  fg=C["DIS"], font=(UI, 10))
+        self.lbl_token.pack(side="right", padx=(8, 8))
         tk.Frame(self, bg=C["BDR"], height=1).pack(fill="x")   # 顶栏分隔线
 
         # Notebook
@@ -169,14 +174,17 @@ class App(ttkb.Window):
         self.tab_auth   = ttk.Frame(nb)
         self.tab_search = ttk.Frame(nb)
         self.tab_dl     = ttk.Frame(nb)
+        self.tab_nasa   = ttk.Frame(nb)
 
         nb.add(self.tab_auth,   text="  🔐 账号配置  ")
         nb.add(self.tab_search, text="  🔍 搜索影像  ")
         nb.add(self.tab_dl,     text="  ⬇  下载管理  ")
+        nb.add(self.tab_nasa,   text="  🛰 NASA 下载  ")
 
         build_auth_tab(self)
         build_search_tab(self)
         build_download_tab(self)
+        build_nasa_tab(self)
 
         # 状态栏
         self.status_var = tk.StringVar(value="就绪")

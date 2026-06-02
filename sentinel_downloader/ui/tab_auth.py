@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
 from core.config import save_config, load_config
+from core.earthdata import verify_credentials
 
 
 def build_auth_tab(app):
@@ -43,6 +44,29 @@ def build_auth_tab(app):
     ttk.Button(pf, text="浏览", command=lambda: _browse_path(app)).pack(side="left", padx=(6, 0))
 
     box.columnconfigure(1, weight=1)
+
+    # NASA Earthdata 账号框（供「NASA 下载」标签页使用）
+    edbox = ttk.LabelFrame(f, text=" NASA Earthdata 账号 ", padding=14)
+    edbox.pack(fill="x", padx=18, pady=(0, 8))
+
+    er = 0
+    tk.Label(edbox, text="用户名：").grid(row=er, column=0, sticky="e", **pad)
+    app.ent_eduser = ttk.Entry(edbox, width=40)
+    app.ent_eduser.grid(row=er, column=1, sticky="ew", **pad)
+
+    er += 1
+    tk.Label(edbox, text="密码：").grid(row=er, column=0, sticky="e", **pad)
+    app.ent_edpass = ttk.Entry(edbox, width=40, show="●")
+    app.ent_edpass.grid(row=er, column=1, sticky="ew", **pad)
+
+    er += 1
+    tk.Label(edbox,
+             text="注册：urs.earthdata.nasa.gov（免费）；凭据在首次下载时校验，"
+                  "若返回 HTML 登录页即为账号密码错误。",
+             fg=C["DIS"], font=(app.FONT_UI, 8), wraplength=520,
+             anchor="w", justify="left").grid(row=er, column=0, columnspan=2,
+                                              sticky="ew", padx=16, pady=(0, 2))
+    edbox.columnconfigure(1, weight=1)
 
     # 按钮
     bf = ttk.Frame(f)
@@ -90,25 +114,57 @@ def _browse_path(app):
 
 
 def _test_login(app):
-    u = app.ent_user.get().strip()
-    p = app.ent_pass.get().strip()
-    if not u or not p:
-        messagebox.showwarning("提示", "请先填写账号和密码")
+    """测试登录：填了哪个验证哪个，两个都填则都验证。
+
+    - Copernicus：调 get_token 获取 Token（顶栏状态随之更新）。
+    - NASA Earthdata：HTTP Basic 校验（不依赖 Copernicus，可单独验证）。
+    """
+    cu = app.ent_user.get().strip()
+    cp = app.ent_pass.get().strip()
+    eu = app.ent_eduser.get().strip()
+    ep = app.ent_edpass.get().strip()
+
+    has_cdse = bool(cu and cp)
+    has_nasa = bool(eu and ep)
+    if not has_cdse and not has_nasa:
+        messagebox.showwarning("提示", "请至少填写一个账号（Copernicus 或 NASA Earthdata）")
         return
-    app._log(app.auth_log, "正在获取 Token...", "info")
+
+    def L(msg, tag="info"):
+        app.after(0, lambda: app._log(app.auth_log, msg, tag))
 
     def _run():
-        try:
-            app.api.get_token(u, p)
-            app.after(0, lambda: app._log(app.auth_log, "✅ 登录成功！Token 已获取", "ok"))
-            app.after(0, lambda: app.lbl_token.config(
-                text="● 已登录", fg=app.colors["GRN"]))
-            app.after(0, lambda: app.set_status("登录成功"))
-        except Exception as e:
-            app.after(0, lambda: app._log(app.auth_log, f"❌ 登录失败: {e}", "err"))
-            app.after(0, lambda: app.lbl_token.config(
-                text="● 登录失败", fg=app.colors["RED"]))
-            app.after(0, lambda: app.set_status("登录失败"))
+        # ── Copernicus（CDSE）：获取 Token ──
+        if has_cdse:
+            L("正在验证 Copernicus 账号（获取 Token）...", "info")
+            try:
+                app.api.get_token(cu, cp)
+                L("✅ Copernicus 登录成功！Token 已获取", "ok")
+                app.after(0, lambda: app.lbl_token.config(
+                    text="CDSE ● 已登录", fg=app.colors["GRN"]))
+            except Exception as e:
+                L(f"❌ Copernicus 登录失败: {e}", "err")
+                app.after(0, lambda: app.lbl_token.config(
+                    text="CDSE ● 登录失败", fg=app.colors["RED"]))
+
+        # ── NASA Earthdata：Basic 认证校验（独立于 Copernicus）──
+        if has_nasa:
+            L("正在验证 NASA Earthdata 账号...", "info")
+            ok, msg = verify_credentials(eu, ep)
+            if ok is True:
+                L(f"✅ Earthdata 验证成功：{msg}", "ok")
+                app.after(0, lambda: app.lbl_token_nasa.config(
+                    text="NASA ● 已验证", fg=app.colors["GRN"]))
+            elif ok is False:
+                L(f"❌ Earthdata 验证失败：{msg}", "err")
+                app.after(0, lambda: app.lbl_token_nasa.config(
+                    text="NASA ● 验证失败", fg=app.colors["RED"]))
+            else:
+                L(f"⚠️ Earthdata {msg}", "warn")
+                app.after(0, lambda: app.lbl_token_nasa.config(
+                    text="NASA ● 未确认", fg=app.colors["ORG"]))
+
+        app.after(0, lambda: app.set_status("登录测试完成"))
 
     threading.Thread(target=_run, daemon=True).start()
 
@@ -119,6 +175,10 @@ def _save_config(app):
         "save_path": app.ent_path.get(),
         "date_from": app.ent_from.get(),
         "date_to":   app.ent_to.get(),
+        # NASA Earthdata（用户名与保存目录持久化；密码同 CDSE 不落盘）
+        "earthdata_username": app.ent_eduser.get(),
+        "nasa_save_path": getattr(app, "ent_nasa_path", None).get()
+                          if hasattr(app, "ent_nasa_path") else "",
     }
     try:
         save_config(cfg)
@@ -134,6 +194,10 @@ def load_config_into_ui(app):
         return
     app.ent_user.insert(0, cfg.get("username", ""))
     app.ent_path.insert(0, cfg.get("save_path", ""))
+    if hasattr(app, "ent_eduser"):
+        app.ent_eduser.insert(0, cfg.get("earthdata_username", ""))
+    if hasattr(app, "ent_nasa_path"):
+        app.ent_nasa_path.insert(0, cfg.get("nasa_save_path", ""))
     if cfg.get("date_from"):
         app.ent_from.delete(0, "end")
         app.ent_from.insert(0, cfg["date_from"])

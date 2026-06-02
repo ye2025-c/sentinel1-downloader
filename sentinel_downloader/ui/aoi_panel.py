@@ -52,7 +52,7 @@ def build_aoi_section(app, parent):
     btn_row1.pack(fill="x", pady=(0, 4))
     ttk.Button(btn_row1, text="📂 导入文件",
                command=lambda: _import_file(app)).pack(side="left", padx=(0, 4))
-    ttk.Button(btn_row1, text="🗺 打开地图",
+    ttk.Button(btn_row1, text="✏ 在地图上画框",
                command=lambda: _open_map(app)).pack(side="left")
 
     btn_row2 = ttk.Frame(abox)
@@ -130,6 +130,9 @@ def _on_select(app):
     app.ent_wkt.delete("1.0", "end")
     app.ent_wkt.insert("1.0", wkt)
 
+    if hasattr(app, "map_panel"):
+        app.map_panel.show_aoi(wkt)
+
     bbox = AoiManager.wkt_to_bbox(wkt)
     if bbox:
         hint = (f"{item['name']}  "
@@ -187,9 +190,12 @@ def _import_file(app):
 
 
 def _open_map(app):
-    """打开地图画框窗口。"""
-    current_wkt = app.ent_wkt.get("1.0", "end").strip()
-    open_map_window(app, initial_wkt=current_wkt)
+    """进入地图画框模式（常驻面板）；地图未加载时降级到弹窗。"""
+    if hasattr(app, "map_panel") and app.map_panel._has_map:
+        app.map_panel.start_draw()
+    else:
+        current_wkt = app.ent_wkt.get("1.0", "end").strip()
+        open_map_window(app, initial_wkt=current_wkt)
 
 
 def _save_current_wkt(app):

@@ -16,7 +16,7 @@ from tkinter import ttk, messagebox, filedialog
 from core.config import PRODUCT_TYPES, S2_PRODUCT_TYPES
 from core.store import HistoryStore, SearchCache
 from ui.aoi_panel import build_aoi_section
-from ui.map_widget import open_map_window
+from ui.map_widget import MapPanel, open_map_window
 from ui.tab_download import render_queue
 
 
@@ -226,12 +226,26 @@ def build_search_tab(app):
     ttk.Button(bf, text="🔍  执行搜索", style="Accent.TButton",
                command=lambda: _do_search(app)).pack(fill="x")
 
-    # 右：结果列表（随分隔条拉伸，weight=1 吸收多余空间）
-    right = ttk.Frame(paned)
-    paned.add(right, weight=1)
+    # 右：垂直分隔（上：常驻地图面板，下：结果区）
+    right_paned = ttk.PanedWindow(paned, orient="vertical")
+    paned.add(right_paned, weight=1)
+
+    app.map_panel = MapPanel(right_paned, app)
+    right_paned.add(app.map_panel, weight=1)
+
+    def _init_right_sash(event=None):
+        try:
+            if right_paned.sashpos(0) < 50:
+                right_paned.sashpos(0, 280)
+        except Exception:
+            pass
+    right_paned.bind("<Map>", _init_right_sash)
+
+    result_frame = ttk.Frame(right_paned)
+    right_paned.add(result_frame, weight=2)
 
     # ── 名称搜索栏（官网复制文件名直接搜索）────────────────────────
-    nsf = ttk.LabelFrame(right, text=" 📋 按产品名搜索（官网复制粘贴）", padding=8)
+    nsf = ttk.LabelFrame(result_frame, text=" 📋 按产品名搜索（官网复制粘贴）", padding=8)
     nsf.pack(fill="x", pady=(0, 8))
 
     tk.Label(nsf,
@@ -259,22 +273,20 @@ def build_search_tab(app):
                command=lambda: app.ent_name_search.delete("1.0", "end")).pack(fill="x")
 
     # 结果工具栏
-    rtb = ttk.Frame(right)
+    rtb = ttk.Frame(result_frame)
     rtb.pack(fill="x", pady=(0, 6))
     app.lbl_count = tk.Label(rtb, text="搜索结果：0 景", fg=C["ACC"],
                              font=(app.FONT_UI, 10, "bold"), bg=C["BG"])
     app.lbl_count.pack(side="left")
     ttk.Button(rtb, text="全选", command=lambda: _select_all(app)).pack(side="right", padx=4)
     ttk.Button(rtb, text="全不选", command=lambda: _deselect_all(app)).pack(side="right", padx=4)
-    ttk.Button(rtb, text="🗺 地图查看",
-               command=lambda: _view_on_map(app)).pack(side="right", padx=4)
     ttk.Button(rtb, text="📄 导出 CSV",
                command=lambda: _export_csv(app)).pack(side="right", padx=4)
     ttk.Button(rtb, text="+ 加入下载队列", style="Green.TButton",
                command=lambda: _add_to_queue(app)).pack(side="right", padx=(0, 8))
 
     # 客户端高级筛选：对已检索结果实时子串过滤，不重新请求服务器
-    ftb = ttk.Frame(right)
+    ftb = ttk.Frame(result_frame)
     ftb.pack(fill="x", pady=(4, 8))
     tk.Label(ftb, text="🔎 筛选：", fg=C["DIS"], font=(app.FONT_UI, 9),
              bg=C["BG"]).pack(side="left")
@@ -292,7 +304,7 @@ def build_search_tab(app):
     cols = ("sel", "name", "date", "platform", "mode", "pol", "orbit_dir",
             "rel_orbit", "abs_orbit", "size", "cloud", "online")
 
-    tree_frame = ttk.Frame(right)
+    tree_frame = ttk.Frame(result_frame)
     tree_frame.pack(fill="both", expand=True)
 
     app.tree = ttk.Treeview(tree_frame, columns=cols, show="headings",
@@ -334,7 +346,7 @@ def build_search_tab(app):
     app.tree.pack(side="left", fill="both", expand=True)
 
     # 统计面板（表格下方一行）
-    app.lbl_stats = tk.Label(right, text="", fg=C["DIS"],
+    app.lbl_stats = tk.Label(result_frame, text="", fg=C["DIS"],
                              font=(app.FONT_UI, 9), bg=C["BG"], anchor="w")
     app.lbl_stats.pack(fill="x", pady=(4, 0))
 
@@ -692,6 +704,10 @@ def render_results(app, from_cache=False):
         app.lbl_count.config(text=f"搜索结果：{total_all} 景{cache_hint}")
     app.set_status(f"搜索完成，共 {total_all} 景{cache_hint}"
                    + (f"，筛选后 {total_shown} 景" if total_shown != total_all else ""))
+
+    if hasattr(app, "map_panel"):
+        app.map_panel.clear_footprints()
+        app.map_panel.show_products(displayed)
 
 
 def _view_on_map(app):

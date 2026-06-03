@@ -1,12 +1,12 @@
 # Sentinel 卫星数据批量搜索 & 下载工具
 
-面向遥感科研的桌面数据获取工具，支持 **Sentinel-1（SAR）** 与 **Sentinel-2（光学）** 影像的可视化搜索与批量下载，数据源为 [Copernicus Data Space Ecosystem (ESA)](https://dataspace.copernicus.eu)；并额外支持 **NASA Earthdata** 数据的 URL 列表批量下载。
+面向遥感科研的桌面数据获取工具，支持 **Sentinel-1（SAR）** 与 **Sentinel-2（光学）** 影像的可视化搜索与批量下载，数据源为 [Copernicus Data Space Ecosystem (ESA)](https://dataspace.copernicus.eu)；并额外支持 **NASA Earthdata** 数据的 URL 列表批量下载，含**下载后按研究区裁剪瘦身**（OMPS / OMI / S5P 等 L2 swath）。
 
 内置海河"25·7"洪涝灾害遥感监测研究区（AOI）预设。
 
 可运行程序位于 [`sentinel_downloader/`](sentinel_downloader/)，采用 `core/`（业务逻辑）+ `ui/`（界面）两层结构，便于维护、打包与扩展新数据源。
 
-> 历史版本：仓库根目录的 `数据下载3.0.py` 为重构前的单文件版本；`原始代码/` 保存更早的迭代，仅作备查，不再维护。
+> 历史版本：仓库根目录的 `数据下载3.0.py` 为重构前的单文件版本；`previous_code/` 保存更早的迭代，仅作备查，不再维护。
 
 ## 功能
 
@@ -35,6 +35,15 @@
 - 导入并解析 URL 列表 → 串行批量下载（文件间礼貌延迟，避免请求过密）
 - 复用同款下载策略：`.part` 断点续传 / 失败退避重试 / 原子落盘 / 实时进度与速度
 - 认证使用「账号配置」页填写的 Earthdata 账号（HTTP Basic，经 `urs.earthdata.nasa.gov` 重定向）
+- **文件列表管理**：导入后可「删除所选」（支持 Ctrl/Shift 多选、Delete 键）/ 清空，挑掉不需要的项（如 README.pdf）再下载
+
+### 下载后裁剪（按研究区瘦身）
+全球轨道的 L2 swath 文件动辄十几 MB，但研究区只占其中一小段扫描线。可选地在**下载完成后按经纬度 bbox 裁掉研究区以外的数据**，大幅减小本地占用（实测单景 OMI 18MB → 0.6MB）。
+
+- 在「NASA 下载」页勾选启用，填研究区 bbox（南纬 / 北纬 / 西经 / 东经，可从 AOI 预设一键填入），可选「裁剪后删除原始大文件」
+- 支持格式：**OMPS / Sentinel-5P 的 `.nc`**（netCDF4）、**OMI 的 `.he5`**（HDF-EOS5，同步改写 `StructMetadata` 维度，严格 HDF-EOS 工具亦兼容）；非数据文件（如 `.pdf`）自动跳过、原样下载
+- 不经过研究区的轨道自动跳过、**保留原始**（不会误删）；裁剪异常也不影响下载本身
+- 减小的是**本地占用**，非网络下载流量（直连文件按 HTTP 整文件下载）；裁剪在下载内核之外独立完成，下载稳定性不受影响
 
 ### 设置
 - 集中调整：默认并行数、单文件最大重试、连接 / 读取超时、NASA 文件间隔、搜索缓存有效期、ZIP 完整性校验开关、日志保留天数
@@ -54,6 +63,7 @@ sentinel_downloader/
 │   ├── s2_api.py           # SentinelS2API（Sentinel-2）
 │   ├── downloader.py       # download() 下载内核（CDSE，含完整性校验）
 │   ├── earthdata.py        # NASA Earthdata 下载内核（独立于 CDSE）
+│   ├── nc_processor.py     # 下载后空间裁剪（瘦身）：netCDF4 / HDF-EOS5 swath
 │   ├── models.py           # Product 数据模型
 │   ├── store.py            # 下载历史 + 搜索缓存 + 队列持久化（JSON 存储）
 │   └── aoi_manager.py      # AOI 解析 / 库管理
@@ -63,7 +73,7 @@ sentinel_downloader/
 │   ├── tab_auth.py         # 账号配置 Tab（CDSE + Earthdata）
 │   ├── tab_search.py       # 搜索影像 Tab（S1/S2 切换）
 │   ├── tab_download.py     # 下载管理 Tab（含下载历史）
-│   ├── tab_nasa.py         # NASA 下载 Tab（URL 列表批量下载）
+│   ├── tab_nasa.py         # NASA 下载 Tab（URL 列表批量下载 + 下载后裁剪）
 │   ├── tab_settings.py     # 设置 Tab（并行 / 重试 / 超时 / 缓存 / 日志）
 │   ├── aoi_panel.py        # AOI 管理面板
 │   └── map_widget.py       # 地图预览 / 画框窗口
@@ -88,6 +98,8 @@ python main.py
 主要依赖：`requests`、`tqdm`、`ttkbootstrap`（界面主题）、`tkintermapview`（内嵌地图）。
 
 > Shapefile / KML 导入及投影转换依赖 **GDAL**（`osgeo`），需自行通过 conda 等方式安装；未安装时 GeoJSON 导入仍可正常使用。
+>
+> 「下载后裁剪」为可选功能，依赖 **netCDF4**（裁剪 `.nc`）与 **h5py**（裁剪 `.he5`）+ `numpy`；未安装时该功能自动跳过、原始文件保留，下载主流程不受影响。
 
 ## 使用步骤
 
@@ -102,7 +114,8 @@ python main.py
 1. 注册 Earthdata 账号：https://urs.earthdata.nasa.gov （免费）
 2. 「账号配置」页填写 Earthdata 账号 → 测试登录（HTTP Basic 校验）
 3. 在 NASA 官网（如 Earthdata Search / GES DISC）勾选数据并导出 `.txt` URL 列表
-4. 「NASA 下载」页导入并解析列表 → 设置保存目录 → 开始下载
+4. 「NASA 下载」页导入并解析列表 → 设置保存目录 →（可选）勾选「下载后裁剪」并填研究区 bbox → 开始下载
+5. 如需，可在文件列表中「删除所选」掉无关项（如 README.pdf）后再下载
 
 ## 说明
 

@@ -158,6 +158,51 @@ def save_settings(new_settings: dict) -> None:
     save_config(cfg)
 
 
+# ── NASA 下载后裁剪（瘦身）配置 ──────────────────────────────────────
+# 与 settings 分开存：settings 放标量调参，这里放结构化的裁剪配置。
+# 存在 config.json 的 "nasa_proc" 子字典；缺键 / bbox 子键回退下表默认。
+_DEFAULT_NASA_PROC = {
+    "enabled":         False,
+    "delete_original": False,
+    "bbox": {"lat_min": 39.8, "lat_max": 41.2,
+             "lon_min": 115.8, "lon_max": 118.5},   # 默认海河北系，可改
+}
+
+
+def get_nasa_proc() -> dict:
+    """读取 NASA 下载后裁剪配置（缺键 / bbox 子键自动回退默认）。"""
+    try:
+        user = load_config().get("nasa_proc", {}) or {}
+    except Exception:
+        user = {}
+    out = {
+        "enabled":         bool(user.get("enabled", _DEFAULT_NASA_PROC["enabled"])),
+        "delete_original": bool(user.get("delete_original",
+                                         _DEFAULT_NASA_PROC["delete_original"])),
+    }
+    bb = dict(_DEFAULT_NASA_PROC["bbox"])
+    if isinstance(user.get("bbox"), dict):
+        bb.update({k: user["bbox"][k] for k in bb if k in user["bbox"]})
+    out["bbox"] = bb
+    return out
+
+
+def save_nasa_proc(proc: dict) -> None:
+    """合并保存 NASA 裁剪配置到 config.json 的 nasa_proc 子字典（不动其它键）。"""
+    cfg = load_config() or {}
+    cur = cfg.get("nasa_proc", {}) or {}
+    if "enabled" in proc:
+        cur["enabled"] = bool(proc["enabled"])
+    if "delete_original" in proc:
+        cur["delete_original"] = bool(proc["delete_original"])
+    if isinstance(proc.get("bbox"), dict):
+        cur["bbox"] = {k: float(proc["bbox"][k])
+                       for k in ("lat_min", "lat_max", "lon_min", "lon_max")
+                       if k in proc["bbox"]}
+    cfg["nasa_proc"] = cur
+    save_config(cfg)
+
+
 def purge_old_logs(days: int = None) -> None:
     """删除 data/logs/ 下修改时间超过保留天数的日志文件。失败静默。
 

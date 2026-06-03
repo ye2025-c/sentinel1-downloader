@@ -183,7 +183,10 @@ def _test_login(app):
 
 
 def _save_config(app):
-    cfg = {
+    # 合并写：先读出整份配置再更新这些键，保留 settings / nasa_proc 等其它子字典
+    # （早期版本这里整体覆盖，会把设置页与裁剪配置一并冲掉）
+    cfg = load_config() or {}
+    cfg.update({
         "username":  app.ent_user.get(),
         "save_path": app.ent_path.get(),
         "date_from": app.ent_from.get(),
@@ -192,7 +195,7 @@ def _save_config(app):
         "earthdata_username": app.ent_eduser.get(),
         "nasa_save_path": getattr(app, "ent_nasa_path", None).get()
                           if hasattr(app, "ent_nasa_path") else "",
-    }
+    })
     try:
         save_config(cfg)
         app._log(app.auth_log, "✅ 配置已保存", "ok")

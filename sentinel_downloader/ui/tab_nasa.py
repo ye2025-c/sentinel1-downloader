@@ -17,11 +17,15 @@ import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
-from core.config import log_line, save_config, get_setting
+from core.config import (
+    log_line, save_config, get_setting, get_nasa_proc, save_nasa_proc,
+)
 from core.earthdata import (
     EarthdataSession, parse_url_list, filename_from_url,
     preauth, download_one,
 )
+from core.aoi_manager import AoiManager
+from core.nc_processor import ProcessConfig, crop_file, is_available as nc_available
 
 
 def build_nasa_tab(app):
@@ -73,6 +77,11 @@ def build_nasa_tab(app):
     tk.Label(row3, text=" 秒（避免请求过密）", fg=C["DIS"],
              font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
 
+    # ── 下载后裁剪（按研究区瘦身）─────────────────────────
+    # 注意：减小的是「本地占用」，不是网络下载流量——直连文件按 HTTP 整文件
+    # 下载，没法服务端按 bbox 子集。这里是下完整文件后本地裁掉研究区以外。
+    _build_crop_panel(app, f, C)
+
     # ── 文件列表 ──────────────────────────────────────────
     lf = ttk.LabelFrame(f, text=" 文件列表 ", padding=10)
     lf.pack(fill="both", expand=True, padx=12, pady=(0, 6))
@@ -83,6 +92,8 @@ def build_nasa_tab(app):
                                   fg=C["ACC"], font=(app.FONT_UI, 10, "bold"), bg=C["BG"])
     app.lbl_nasa_count.pack(side="left")
     ttk.Button(ltb, text="清空", command=lambda: _clear_list(app)).pack(side="right")
+    ttk.Button(ltb, text="删除所选", command=lambda: _delete_selected(app)).pack(
+        side="right", padx=(0, 6))
 
     ncols = ("idx", "name", "status")
     app.ntree = ttk.Treeview(lf, columns=ncols, show="headings", selectmode="extended")
@@ -101,6 +112,8 @@ def build_nasa_tab(app):
     app.ntree.configure(yscrollcommand=nsb.set)
     app.ntree.pack(side="left", fill="both", expand=True)
     nsb.pack(side="right", fill="y")
+    # 选中后按 Delete 键也可移除
+    app.ntree.bind("<Delete>", lambda e: _delete_selected(app))
 
     # ── 进度区 ────────────────────────────────────────────
     pgf = ttk.Frame(f)
@@ -137,6 +150,97 @@ def build_nasa_tab(app):
     app.nasa_log.tag_config("warn", foreground=C["ORG"])
     app.nasa_log.tag_config("info", foreground=C["ACC"])
     app.nasa_log.tag_config("head", foreground=C["FG"], font=("Consolas", 9, "bold"))
+
+
+# ─────────────────────────────────────────────
+#  下载后裁剪面板（按研究区经纬度瘦身）
+# ─────────────────────────────────────────────
+def _build_crop_panel(app, f, C):
+    """构建「下载后裁剪」面板，状态存入 app.var_crop_* 并从 config 回填。"""
+    proc = get_nasa_proc()
+    bb = proc["bbox"]
+    app.var_crop_enabled = tk.BooleanVar(value=proc["enabled"])
+    app.var_crop_del     = tk.BooleanVar(value=proc["delete_original"])
+    app.var_crop_s = tk.StringVar(value=f"{bb['lat_min']:g}")   # 南纬 lat_min
+    app.var_crop_n = tk.StringVar(value=f"{bb['lat_max']:g}")   # 北纬 lat_max
+    app.var_crop_w = tk.StringVar(value=f"{bb['lon_min']:g}")   # 西经 lon_min
+    app.var_crop_e = tk.StringVar(value=f"{bb['lon_max']:g}")   # 东经 lon_max
+
+    box = ttk.LabelFrame(f, text=" 下载后裁剪（按研究区瘦身，减小本地占用） ", padding=12)
+    box.pack(fill="x", padx=12, pady=(0, 6))
+
+    # 第一行：启用开关
+    r0 = ttk.Frame(box)
+    r0.pack(fill="x", pady=(0, 6))
+    ttk.Checkbutton(r0, text="启用：下载后裁掉研究区以外数据（netCDF swath，如 OMPS/S5P）",
+                    variable=app.var_crop_enabled).pack(side="left")
+
+    # 第二行：研究区 bbox 四个输入 + 从 AOI 预设填入
+    r1 = ttk.Frame(box)
+    r1.pack(fill="x", pady=(0, 6))
+
+    def _coord(parent, label, var):
+        tk.Label(parent, text=label, fg=C["FG"], font=(app.FONT_UI, 9),
+                 bg=C["BG"]).pack(side="left")
+        ttk.Entry(parent, textvariable=var, width=7).pack(side="left", padx=(2, 10))
+
+    _coord(r1, "南纬", app.var_crop_s)
+    _coord(r1, "北纬", app.var_crop_n)
+    _coord(r1, "西经", app.var_crop_w)
+    _coord(r1, "东经", app.var_crop_e)
+
+    tk.Label(r1, text="从AOI填入：", fg=C["DIS"], font=(app.FONT_UI, 9),
+             bg=C["BG"]).pack(side="left", padx=(8, 0))
+    names = [it["name"] for it in AoiManager.get_display_list()]
+    app.cmb_crop_aoi = ttk.Combobox(r1, values=names, state="readonly",
+                                    width=14, font=(app.FONT_UI, 9))
+    app.cmb_crop_aoi.pack(side="left")
+    app.cmb_crop_aoi.bind("<<ComboboxSelected>>", lambda e: _fill_bbox_from_aoi(app))
+
+    # 第三行：删除原始 + 依赖缺失提示
+    r2 = ttk.Frame(box)
+    r2.pack(fill="x")
+    ttk.Checkbutton(r2, text="裁剪成功后删除原始大文件（仅保留瘦身版）",
+                    variable=app.var_crop_del).pack(side="left")
+    if not nc_available():
+        tk.Label(r2, text="  ⚠ 未安装 netCDF4/h5py，裁剪将自动跳过（不影响下载）",
+                 fg=C["ORG"], font=(app.FONT_UI, 8), bg=C["BG"]).pack(side="left")
+
+
+def _fill_bbox_from_aoi(app):
+    """从选中的 AOI 预设/库项的 WKT 计算外接矩形，填入四个 bbox 输入框。"""
+    name = app.cmb_crop_aoi.get()
+    item = next((it for it in AoiManager.get_display_list() if it["name"] == name), None)
+    if not item:
+        return
+    bbox = AoiManager.wkt_to_bbox(item.get("wkt", ""))   # [min_lon,min_lat,max_lon,max_lat]
+    if not bbox:
+        return
+    app.var_crop_w.set(f"{bbox[0]:g}")
+    app.var_crop_s.set(f"{bbox[1]:g}")
+    app.var_crop_e.set(f"{bbox[2]:g}")
+    app.var_crop_n.set(f"{bbox[3]:g}")
+
+
+def _collect_crop_cfg(app):
+    """读裁剪面板，返回 (ProcessConfig, bbox_valid)。bbox 非法时 enabled 置否。"""
+    enabled = bool(app.var_crop_enabled.get())
+    try:
+        bbox = {
+            "lat_min": float(app.var_crop_s.get()), "lat_max": float(app.var_crop_n.get()),
+            "lon_min": float(app.var_crop_w.get()), "lon_max": float(app.var_crop_e.get()),
+        }
+        # 容错：用户把 min/max 填反了自动纠正
+        if bbox["lat_min"] > bbox["lat_max"]:
+            bbox["lat_min"], bbox["lat_max"] = bbox["lat_max"], bbox["lat_min"]
+        if bbox["lon_min"] > bbox["lon_max"]:
+            bbox["lon_min"], bbox["lon_max"] = bbox["lon_max"], bbox["lon_min"]
+        bbox_valid = True
+    except (ValueError, TypeError):
+        bbox, bbox_valid = {}, False
+    cfg = ProcessConfig(enabled=enabled and bbox_valid, bbox=bbox,
+                        delete_original=bool(app.var_crop_del.get()))
+    return cfg, bbox_valid
 
 
 # ─────────────────────────────────────────────
@@ -219,6 +323,22 @@ def _clear_list(app):
         render_list(app)
 
 
+def _delete_selected(app):
+    """从列表移除选中的项（支持多选 / Delete 键）。下载中需先停止。"""
+    if app.nasa_downloading:
+        messagebox.showwarning("提示", "下载中，请先停止再删除")
+        return
+    sel = app.ntree.selection()
+    if not sel:
+        messagebox.showinfo("提示", "请先在列表中选择要删除的项（可按住 Ctrl/Shift 多选）")
+        return
+    # 渲染时 iid 即 nasa_items 的下标；按下标剔除后重渲染
+    drop = {int(iid) for iid in sel}
+    app.nasa_items = [it for i, it in enumerate(app.nasa_items) if i not in drop]
+    render_list(app)
+    _nlog(app, f"已从列表移除 {len(drop)} 项", "info")
+
+
 # ─────────────────────────────────────────────
 #  下载调度（串行 + 礼貌间隔）
 # ─────────────────────────────────────────────
@@ -237,6 +357,21 @@ def _start(app):
         return
     if app.nasa_downloading:
         return
+
+    # 收集「下载后裁剪」配置并校验
+    proc_cfg, bbox_valid = _collect_crop_cfg(app)
+    if app.var_crop_enabled.get() and not bbox_valid:
+        messagebox.showwarning("提示", "已启用下载后裁剪，但研究区经纬度填写无效，请检查四个数值")
+        return
+    # 记住裁剪配置（启用 / bbox / 删原始），下次自动带出
+    try:
+        save_nasa_proc({
+            "enabled":         bool(app.var_crop_enabled.get()),
+            "delete_original": bool(app.var_crop_del.get()),
+            **({"bbox": proc_cfg.bbox} if bbox_valid else {}),
+        })
+    except Exception:
+        pass
 
     # 记住本次保存目录，下次自动带出
     try:
@@ -272,6 +407,14 @@ def _start(app):
 
         _nlog(app, f"═══ 开始下载 {total} 个文件（串行，间隔 {delay}s）═══", "head")
         _nlog(app, f"保存目录: {save_dir}", "info")
+        if proc_cfg.enabled:
+            b = proc_cfg.bbox
+            if not nc_available():
+                _nlog(app, "⚠️ 已启用下载后裁剪，但未安装 netCDF4 → 本次跳过裁剪（仅下载）", "warn")
+            else:
+                _nlog(app, f"✂️ 下载后裁剪已启用：研究区 纬[{b['lat_min']:g},{b['lat_max']:g}] "
+                           f"经[{b['lon_min']:g},{b['lon_max']:g}]"
+                           f"{'，裁剪后删原始' if proc_cfg.delete_original else ''}", "info")
         app.after(0, lambda: app.lbl_nasa_prog.config(
             text=f"准备下载，共 {total} 个...", fg=app.colors["DIS"]))
         app.after(0, lambda: app.nasa_prog.config(value=0))
@@ -299,7 +442,7 @@ def _start(app):
                     app.nasa_prog.config(value=p),
                     app.lbl_nasa_prog.config(text=lb, fg=app.colors["ACC"])))
 
-            success, _ = download_one(
+            success, save_path = download_one(
                 session, it["url"], save_dir,
                 log_cb=lambda m, t="info": _nlog(app, m, t),
                 prog_cb=_prog,
@@ -309,6 +452,13 @@ def _start(app):
             it["status"] = "done" if success else "error"
             if success:
                 ok_cnt += 1
+                # 下载后裁剪（瘦身）——独立于下载内核，异常不影响下载结果
+                if proc_cfg.enabled and save_path and nc_available():
+                    try:
+                        crop_file(save_path, proc_cfg,
+                                  log_cb=lambda m, t="info": _nlog(app, m, t))
+                    except Exception as e:
+                        _nlog(app, f"  ⚠️ 裁剪异常（已跳过，原始保留）：{e}", "warn")
             app.after(0, lambda: render_list(app))
 
             done = sum(1 for x in pending if x["status"] in ("done", "error"))

@@ -25,7 +25,9 @@ from core.earthdata import (
     preauth, download_one,
 )
 from core.aoi_manager import AoiManager
-from core.nc_processor import ProcessConfig, crop_file, is_available as nc_available
+from core.nc_processor import (
+    ProcessConfig, crop_file, is_available as nc_available, output_path_for,
+)
 
 
 def build_nasa_tab(app):
@@ -431,6 +433,17 @@ def _start(app):
         for i, it in enumerate(pending, 1):
             if app._nasa_stop.is_set():
                 break
+
+            # 启用裁剪时：瘦身版已在磁盘上 → 该 URL 已处理完，直接跳过。
+            # 解决"删原始后原始名不在、重新导入 txt 会重复下载整文件"的问题。
+            if proc_cfg.enabled and nc_available():
+                out_p = output_path_for(os.path.join(save_dir, it["name"]), proc_cfg)
+                if os.path.exists(out_p):
+                    it["status"] = "done"
+                    ok_cnt += 1
+                    _nlog(app, f"  ⏭ [{i}/{total}] 瘦身版已存在，跳过：{it['name']}", "ok")
+                    app.after(0, lambda: render_list(app))
+                    continue
 
             it["status"] = "downloading"
             app.after(0, lambda: render_list(app))

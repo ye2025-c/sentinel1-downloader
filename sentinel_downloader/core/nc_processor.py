@@ -74,6 +74,17 @@ def is_available() -> bool:
     return _has("numpy") and (_has("netCDF4") or _has("h5py"))
 
 
+def output_path_for(file_path: str, config: "ProcessConfig") -> str:
+    """裁剪输出路径（与 crop_file 内部命名同源）。
+
+    供调用方在下载前判断"瘦身版已存在则跳过"——尤其开了删原始后，原始名
+    已不在，必须按这个输出名判断该 URL 是否已处理完，避免重复下载。
+    """
+    out_dir = config.out_dir or os.path.dirname(file_path)
+    stem, ext = os.path.splitext(os.path.basename(file_path))
+    return os.path.join(out_dir, f"{stem}{config.out_suffix}{ext}")
+
+
 # ── 对外主入口 ────────────────────────────────────────────────────────
 def crop_file(file_path: str, config: ProcessConfig, log_cb=None):
     """对单个已下载文件做空间裁剪瘦身。
@@ -102,10 +113,8 @@ def crop_file(file_path: str, config: ProcessConfig, log_cb=None):
 
     ext = os.path.splitext(file_path)[1].lower()
 
-    # 计算输出路径
-    out_dir = config.out_dir or os.path.dirname(file_path)
-    stem, real_ext = os.path.splitext(os.path.basename(file_path))
-    out_path = os.path.join(out_dir, f"{stem}{config.out_suffix}{real_ext}")
+    # 计算输出路径（与 output_path_for 同源）
+    out_path = output_path_for(file_path, config)
 
     # 幂等：输出已存在直接跳过，沿用下载侧"存在即完整"的思路
     if os.path.exists(out_path):

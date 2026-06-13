@@ -96,6 +96,8 @@ def build_nasa_tab(app):
     ttk.Button(ltb, text="清空", command=lambda: _clear_list(app)).pack(side="right")
     ttk.Button(ltb, text="删除所选", command=lambda: _delete_selected(app)).pack(
         side="right", padx=(0, 6))
+    ttk.Button(ltb, text="↻ 重试失败", command=lambda: _retry_failed(app)).pack(
+        side="right", padx=(0, 6))
 
     ncols = ("idx", "name", "status")
     app.ntree = ttk.Treeview(lf, columns=ncols, show="headings", selectmode="extended")
@@ -339,6 +341,25 @@ def _delete_selected(app):
     app.nasa_items = [it for i, it in enumerate(app.nasa_items) if i not in drop]
     render_list(app)
     _nlog(app, f"已从列表移除 {len(drop)} 项", "info")
+
+
+def _retry_failed(app):
+    """把列表里失败(error)的项重置为等待并立即重新下载。
+
+    与 CDSE 队列对称：_start 跳过 done、处理其余项，故只需把 error 翻回
+    waiting 再启动（文件级 .part 续传会接上未完成的部分）。"""
+    if app.nasa_downloading:
+        messagebox.showinfo("提示", "正在下载中，请等本轮结束后再重试")
+        return
+    failed = [it for it in app.nasa_items if it["status"] == "error"]
+    if not failed:
+        messagebox.showinfo("提示", "列表中没有失败的项")
+        return
+    for it in failed:
+        it["status"] = "waiting"
+    render_list(app)
+    _nlog(app, f"↻ 重试 {len(failed)} 个失败项", "info")
+    _start(app)
 
 
 # ─────────────────────────────────────────────

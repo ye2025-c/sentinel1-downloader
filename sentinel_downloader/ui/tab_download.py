@@ -35,6 +35,7 @@ def build_download_tab(app):
     app.lbl_queue.pack(side="left")
     ttk.Button(qtb, text="清空队列", command=lambda: _clear_queue(app)).pack(side="right")
     ttk.Button(qtb, text="移除选中", command=lambda: _remove_selected(app)).pack(side="right", padx=4)
+    ttk.Button(qtb, text="↻ 重试失败", command=lambda: _retry_failed(app)).pack(side="right", padx=4)
 
     # 队列 Treeview
     qcols = ("idx", "name", "size", "status")
@@ -115,6 +116,8 @@ def build_download_tab(app):
                command=lambda: _clear_history(app)).pack(side="right")
     ttk.Button(htb, text="存为 AOI",
                command=lambda: _save_hist_as_aoi(app)).pack(side="right", padx=(0, 6))
+    ttk.Button(htb, text="重新下载",
+               command=lambda: _redownload_hist(app)).pack(side="right", padx=(0, 6))
 
     hcols = ("hname", "hsize", "hstatus", "htime")
     app.htree = ttk.Treeview(hf, columns=hcols, show="headings",
@@ -180,6 +183,26 @@ def _remove_selected(app):
             del app.queue[idx]
     render_queue(app)
     app._persist_queue()
+
+
+def _retry_failed(app):
+    """把队列里失败(error)的任务重置为等待并立即重新下载。
+
+    复用现有调度：_start_download 跳过 done、处理其余项，故只需把 error
+    翻回 waiting 再启动。下载中则不重复触发（本轮结束后可再点）。"""
+    if app.downloading:
+        messagebox.showinfo("提示", "正在下载中，请等本轮结束后再重试")
+        return
+    failed = [q for q in app.queue if q["status"] == "error"]
+    if not failed:
+        messagebox.showinfo("提示", "队列中没有失败的任务")
+        return
+    for q in failed:
+        q["status"] = "waiting"
+    render_queue(app)
+    app._persist_queue()
+    app._dlog(f"↻ 重试 {len(failed)} 个失败任务", "info")
+    _start_download(app)
 
 
 # ─────────────────────────────────────────────
@@ -377,6 +400,40 @@ def _clear_history(app):
     if messagebox.askyesno("确认", "确定清除所有下载历史？"):
         HistoryStore.clear()
         render_history(app)
+
+
+def _redownload_hist(app):
+    """把选中的历史记录重新加入下载队列（用于重试失败 / 再次下载）。
+
+    队列清空或重启后，失败记录仍留在历史里——据此即可一键重新入队。
+    队列已有同一产品则只把状态翻回 waiting，避免重复条目。"""
+    sel = app.htree.selection()
+    if not sel:
+        messagebox.showinfo("提示", "请先在历史列表中选中一条记录")
+        return
+    idx     = int(sel[0])
+    records = HistoryStore.get_all()
+    if idx >= len(records):
+        return
+    r   = records[idx]
+    pid = r.get("product_id")
+    if not pid:
+        messagebox.showinfo("提示", "该记录缺少产品 ID，无法重新下载")
+        return
+    existing = next((q for q in app.queue if q["id"] == pid), None)
+    if existing:
+        existing["status"] = "waiting"
+    else:
+        app.queue.append({
+            "id":        pid,
+            "name":      r.get("product_name", ""),
+            "size":      r.get("size", ""),
+            "status":    "waiting",
+            "footprint": r.get("footprint", ""),
+        })
+    render_queue(app)
+    app._persist_queue()
+    messagebox.showinfo("✅", "已加入下载队列，点击「▶ 开始下载」即可重新下载")
 
 
 def _save_hist_as_aoi(app):

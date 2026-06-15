@@ -50,6 +50,16 @@ class App(ttkb.Window):
         self.minsize(980, 660)
         self.resizable(True, True)
 
+        # 窗口图标：exe 打包后从捆绑资源加载；开发模式跳过（不影响运行）
+        try:
+            import sys as _sys, os as _os
+            if getattr(_sys, 'frozen', False):
+                _ico = _os.path.join(_sys._MEIPASS, "_icon.ico")
+                if _os.path.exists(_ico):
+                    self.iconbitmap(default=_ico)
+        except Exception:
+            pass
+
         # ── 共享状态（各 Tab 通过 app.xxx 访问）──────────────────────
         self.api            = CopernicusAPI()
         self.api_s2         = SentinelS2API()
@@ -158,7 +168,7 @@ class App(ttkb.Window):
         top = tk.Frame(self, bg=C["BG3"], height=52)
         top.pack(fill="x")
         top.pack_propagate(False)
-        tk.Label(top, text="🛰  Sentinel-1 批量下载工具",
+        tk.Label(top, text="🛰  Sentinel S1/S2 批量下载工具",
                  bg=C["BG3"], fg=C["ACC"],
                  font=(UI, 14, "bold")).pack(side="left", padx=18, pady=12)
         # 顶栏登录状态：CDSE 与 NASA 各一个指示（从左到右 CDSE | NASA）

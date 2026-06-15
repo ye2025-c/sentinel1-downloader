@@ -509,9 +509,10 @@ def _do_search_s2(app):
         app.api_s2.token      = app.api.token
         app.api_s2.token_time = app.api.token_time
 
-    wkt = app.ent_wkt.get("1.0", "end").strip()
-    if not wkt:
-        messagebox.showwarning("提示", "请选择或输入研究区 WKT")
+    wkt     = app.ent_wkt.get("1.0", "end").strip() or None
+    tile_id = app.ent_s2_tile.get().strip() or None
+    if not wkt and not tile_id:
+        messagebox.showwarning("提示", "请选择研究区 WKT，或填写 Tile ID（两者至少一个）")
         return
 
     date_from   = app.ent_from.get().strip()
@@ -529,8 +530,6 @@ def _do_search_s2(app):
 
     cloud_raw       = app.cmb_s2_cloud.get()
     cloud_cover_max = None if cloud_raw == "不限" else float(cloud_raw)
-
-    tile_id = app.ent_s2_tile.get().strip() or None
 
     rel_orbit_str = app.ent_s2_orbit.get().strip()
     relative_orbit = int(rel_orbit_str) if rel_orbit_str.isdigit() else None
@@ -629,11 +628,12 @@ def _do_name_search(app):
 
 def _product_haystack(p):
     """把 Product 的可检索字段拼成一个小写串，供客户端筛选做子串匹配。"""
-    return " ".join([
-        p.name, p.platform, p.mode, p.polarization,
-        p.orbit_direction, p.relative_orbit, p.absolute_orbit,
-        p.acquisition_time,
-    ]).lower()
+    parts = [p.name, p.platform, p.mode, p.polarization,
+             p.orbit_direction, p.relative_orbit, p.absolute_orbit,
+             p.acquisition_time]
+    if p.tile_id:
+        parts.append(p.tile_id)
+    return " ".join(parts).lower()
 
 
 def _filtered_products(app):
@@ -686,15 +686,17 @@ def render_results(app, from_cache=False):
     total_shown = len(displayed)
 
     def _fmt(d):
-        return "  ".join(f"{k}:{v}" for k, v in sorted(d.items()) if k != "—")
+        return "  ".join(f"{k}:{v}" for k, v in sorted(d.items()) if k not in ("—", ""))
 
-    stats_str = (
-        f"共 {total_shown} 景  |  "
-        f"{_fmt(stat_plat)}  |  "
-        f"{_fmt(stat_orbit)}  |  "
-        f"{_fmt(stat_pol)}  |  "
-        f"{_fmt(stat_mode)}"
-    ) if total_shown else "无结果"
+    if total_shown:
+        _parts = [f"共 {total_shown} 景", _fmt(stat_plat),
+                  _fmt(stat_orbit), _fmt(stat_pol), _fmt(stat_mode)]
+        clouds = [p.cloud_cover for p in displayed if p.cloud_cover >= 0]
+        if clouds:
+            _parts.append(f"均云量:{sum(clouds)/len(clouds):.0f}%")
+        stats_str = "  |  ".join(x for x in _parts if x)
+    else:
+        stats_str = "无结果"
 
     app.lbl_stats.config(text=stats_str)
     cache_hint = "（来自缓存）" if from_cache else ""

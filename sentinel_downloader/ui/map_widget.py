@@ -17,11 +17,13 @@ open_map_window(app) 打开一个 Toplevel 窗口，内嵌 tkintermapview。
   级别 2 — 失败：显示"底图加载失败"文字，bbox 坐标仍可显示
 """
 
+import os
 import re
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
 from core.aoi_manager import AoiManager
+from core.config import DATA_DIR
 
 # 单次叠加绘制的 footprint 上限，过多会拖慢地图渲染
 _MAX_FOOTPRINTS = 200
@@ -76,8 +78,10 @@ class MapPanel(ttk.Frame):
     def _load_map(self):
         try:
             from tkintermapview import TkinterMapView
+            os.makedirs(DATA_DIR, exist_ok=True)
             self.map_widget = TkinterMapView(
-                self.map_frame, width=600, height=240, corner_radius=4)
+                self.map_frame, width=600, height=240, corner_radius=4,
+                database_path=os.path.join(DATA_DIR, "tile_cache.db"))
             self.map_widget.pack(fill="both", expand=True)
             self.map_widget.set_position(39.5, 116.0, marker=False)
             self.map_widget.set_zoom(7)
@@ -308,8 +312,10 @@ class _MapWindow(tk.Toplevel):
         """异步加载地图；失败时显示提示文字，不阻塞窗口。"""
         try:
             from tkintermapview import TkinterMapView
+            os.makedirs(DATA_DIR, exist_ok=True)
             self.map_widget = TkinterMapView(
-                self.map_frame, width=700, height=460, corner_radius=4)
+                self.map_frame, width=700, height=460, corner_radius=4,
+                database_path=os.path.join(DATA_DIR, "tile_cache.db"))
             self.map_widget.pack(fill="both", expand=True)
             self.map_widget.set_position(39.5, 116.0, marker=False)
             self.map_widget.set_zoom(7)

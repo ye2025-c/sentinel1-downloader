@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Sentinel-1 SAR 批量搜索 & 下载工具 —— 程序入口
-数据源: Copernicus Data Space (ESA)
+Sentinel S1/S2 批量搜索 & 下载工具 —— 程序入口
+数据源: Copernicus Data Space (ESA) / NASA Earthdata
 
 运行：
     python main.py

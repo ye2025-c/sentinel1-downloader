@@ -20,6 +20,7 @@ load_config 仍会回退读取并自动迁移到 data/config.json，老用户不
 """
 
 import os
+import sys
 import json
 from datetime import datetime
 
@@ -29,8 +30,15 @@ SEARCH_URL   = "https://catalogue.dataspace.copernicus.eu/odata/v1/Products"
 DOWNLOAD_URL = "https://download.dataspace.copernicus.eu/odata/v1/Products({id})/$value"
 
 # ── 路径（core/ 的上一级即 sentinel_downloader/）──────────────────────
-BASE_DIR    = os.path.dirname(os.path.abspath(__file__))
-PROJECT_DIR = os.path.normpath(os.path.join(BASE_DIR, ".."))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 打包为 exe（PyInstaller --onefile）时 __file__ 指向临时解压目录，重启后会被
+# 清除；数据文件必须放在 exe 旁边。开发模式下沿用原路径（sentinel_downloader/..）
+if getattr(sys, 'frozen', False):
+    PROJECT_DIR = os.path.dirname(sys.executable)
+else:
+    PROJECT_DIR = os.path.normpath(os.path.join(BASE_DIR, ".."))
+
 DATA_DIR    = os.path.join(PROJECT_DIR, "data")
 LOG_DIR     = os.path.join(DATA_DIR, "logs")
 CONFIG_FILE = os.path.join(DATA_DIR, "config.json")

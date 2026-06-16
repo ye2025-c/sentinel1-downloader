@@ -20,6 +20,7 @@ import ttkbootstrap as ttkb
 from core.api import CopernicusAPI
 from core.s2_api import SentinelS2API
 from core.config import log_line, purge_old_logs
+from core.app_info import APP_VERSION
 from core.store import SearchCache, QueueStore
 from ui.tab_auth import build_auth_tab, load_config_into_ui
 from ui.tab_search import build_search_tab
@@ -43,7 +44,7 @@ def _darken(hexcolor, f=0.82):
 class App(ttkb.Window):
     def __init__(self):
         super().__init__(
-            title="Sentinel 批量下载工具  |  海河25·7洪涝监测",
+            title=f"Sentinel 批量下载工具 v{APP_VERSION}  |  海河25·7洪涝监测",
             themename=THEME,
             size=(1130, 780),
         )
@@ -168,7 +169,7 @@ class App(ttkb.Window):
         top = tk.Frame(self, bg=C["BG3"], height=52)
         top.pack(fill="x")
         top.pack_propagate(False)
-        tk.Label(top, text="🛰  Sentinel S1/S2 批量下载工具",
+        tk.Label(top, text=f"🛰  Sentinel S1/S2 批量下载工具  v{APP_VERSION}",
                  bg=C["BG3"], fg=C["ACC"],
                  font=(UI, 14, "bold")).pack(side="left", padx=18, pady=12)
         # 顶栏登录状态：CDSE 与 NASA 各一个指示（从左到右 CDSE | NASA）

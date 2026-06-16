@@ -29,6 +29,11 @@ except ImportError:
 class AoiManager:
     """AOI 库管理，线程安全（依赖调用方在 UI 线程调用，无额外锁需求）。"""
 
+    @staticmethod
+    def has_gdal() -> bool:
+        """Return whether GDAL/osgeo is available for Shapefile parsing."""
+        return _HAS_GDAL
+
     # ── 内部读写 ──────────────────────────────────────────
     @classmethod
     def _load(cls) -> dict:

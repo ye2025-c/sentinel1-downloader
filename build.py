@@ -15,10 +15,14 @@ Why venv isolation?
 
 import io
 import os
+import re
 import sys
+import argparse
+import hashlib
 import shutil
 import subprocess
 import tempfile
+from datetime import datetime
 
 # Force UTF-8 output so GBK terminal doesn't mangle print
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -30,6 +34,7 @@ ENTRY   = os.path.join(APP_DIR, "main.py")
 ICO     = os.path.join(tempfile.gettempdir(), "_icon.ico")
 VENV    = os.path.join(ROOT, "_build_env")
 OUT_EXE = os.path.join(ROOT, "SentinelDownloader.exe")
+APP_INFO = os.path.join(APP_DIR, "core", "app_info.py")
 
 # Only what the app actually needs at runtime.
 # Optional deps (osgeo / numpy / netCDF4 / h5py) are intentionally excluded:
@@ -40,6 +45,21 @@ RUNTIME_PACKAGES = [
     "ttkbootstrap",
     "tkintermapview",
 ]
+
+FULL_PACKAGES = [
+    "numpy",
+    "netCDF4",
+    "h5py",
+]
+
+
+def _read_version():
+    try:
+        with open(APP_INFO, "r", encoding="utf-8") as f:
+            m = re.search(r'APP_VERSION\s*=\s*"([^"]+)"', f.read())
+        return m.group(1) if m else "unknown"
+    except Exception:
+        return "unknown"
 
 
 # ─── 图标生成 ────────────────────────────────────────────────
@@ -120,7 +140,7 @@ def _generate_icon():
 
 
 # ─── 隔离 venv ───────────────────────────────────────────────
-def _create_venv():
+def _create_venv(full=False):
     print("[*] Creating isolated build venv...")
     if os.path.exists(VENV):
         shutil.rmtree(VENV)
@@ -128,7 +148,7 @@ def _create_venv():
                           stdout=subprocess.DEVNULL)
 
     pip = os.path.join(VENV, "Scripts", "pip.exe")
-    pkgs = RUNTIME_PACKAGES + ["pyinstaller"]
+    pkgs = RUNTIME_PACKAGES + (FULL_PACKAGES if full else []) + ["pyinstaller"]
     print(f"[*] Installing {len(pkgs)} packages: {', '.join(pkgs)}")
     subprocess.check_call([pip, "install", "-q"] + pkgs)
     print("[OK] Venv ready")
@@ -153,15 +173,60 @@ def _cleanup():
 
 
 # ─── 主流程 ─────────────────────────────────────────────────
-def build():
+def _write_release_files(mode, size_mb):
+    version = _read_version()
+    sha_path = os.path.join(ROOT, "SentinelDownloader.sha256.txt")
+    notes_path = os.path.join(ROOT, "release_notes.txt")
+
+    h = hashlib.sha256()
+    with open(OUT_EXE, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+
+    with open(sha_path, "w", encoding="utf-8") as f:
+        f.write(f"{h.hexdigest()}  SentinelDownloader.exe\n")
+
+    with open(notes_path, "w", encoding="utf-8") as f:
+        f.write(f"Sentinel Downloader v{version}\n")
+        f.write(f"Build time: {datetime.now():%Y-%m-%d %H:%M:%S}\n")
+        f.write(f"Mode: {mode}\n")
+        f.write(f"Size: {size_mb:.1f} MB\n")
+        f.write("\nFiles:\n")
+        f.write("- SentinelDownloader.exe\n")
+        f.write("- SentinelDownloader.sha256.txt\n")
+        f.write("- release_notes.txt\n")
+        if mode == "standard":
+            f.write("\nNotes:\n")
+            f.write("- Standard build excludes numpy/netCDF4/h5py and GDAL to keep the exe small.\n")
+            f.write("- NASA post-download crop is skipped when optional scientific packages are missing.\n")
+            f.write("- GeoJSON/KML AOI import works; Shapefile import requires GDAL.\n")
+        else:
+            f.write("\nNotes:\n")
+            f.write("- Full build includes numpy/netCDF4/h5py for NASA post-download crop.\n")
+            f.write("- GDAL/osgeo is still not bundled because pip installation is not reliable on all Windows environments.\n")
+
+    print(f"[OK] SHA256: {sha_path}")
+    print(f"[OK] Release notes: {notes_path}")
+
+
+def build(full=False):
+    mode = "full" if full else "standard"
+    print(f"[*] Build mode: {mode}")
     print("[*] Generating icon...")
     _generate_icon()
 
-    _create_venv()
+    _create_venv(full=full)
     venv_py = os.path.join(VENV, "Scripts", "python.exe")
 
     sep      = ";" if sys.platform == "win32" else ":"
     add_data = f"{ICO}{sep}."       # bundle icon; accessible via sys._MEIPASS
+    extra_args = []
+    if full:
+        extra_args.extend([
+            "--hidden-import", "numpy",
+            "--hidden-import", "netCDF4",
+            "--hidden-import", "h5py",
+        ])
 
     cmd = [
         venv_py, "-m", "PyInstaller",
@@ -175,6 +240,7 @@ def build():
         "--collect-all", "tkintermapview",  # map widget assets
         "--hidden-import", "certifi",       # SSL certs for requests
         "--paths", APP_DIR,                 # resolve core/ ui/ local packages
+        *extra_args,
         ENTRY,
     ]
 
@@ -194,6 +260,7 @@ def build():
         size_mb = os.path.getsize(OUT_EXE) / 1024 / 1024
         print(f"\n[DONE] Build complete! ({size_mb:.0f} MB)")
         print(f"       {OUT_EXE}")
+        _write_release_files(mode, size_mb)
     else:
         print("\n[ERROR] Output exe not found -- check dist/ directory")
 
@@ -201,4 +268,11 @@ def build():
 
 
 if __name__ == "__main__":
-    build()
+    parser = argparse.ArgumentParser(description="Build SentinelDownloader.exe")
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--standard", action="store_true",
+                       help="small exe, optional scientific packages excluded (default)")
+    group.add_argument("--full", action="store_true",
+                       help="include numpy/netCDF4/h5py for NASA crop support")
+    args = parser.parse_args()
+    build(full=args.full)

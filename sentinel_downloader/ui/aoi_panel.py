@@ -83,6 +83,13 @@ def build_aoi_section(app, parent):
     )
     app.lbl_aoi_hint.pack(fill="x", pady=(4, 0))
 
+    dep_text = ("GeoJSON/KML 可用；Shapefile 可用"
+                if AoiManager.has_gdal()
+                else "GeoJSON/KML 可用；Shapefile 需要 GDAL（标准版 exe 会跳过）")
+    tk.Label(abox, text=dep_text, fg=C["DIS"],
+             font=(app.FONT_UI, 8), bg=C["BG"], anchor="w", wraplength=260).pack(
+        fill="x", pady=(4, 0))
+
     # ── 内部状态 ──────────────────────────────────────────
     app._aoi_items = []      # 当前列表中的 AOI 条目（与 Listbox 行一一对应）
 

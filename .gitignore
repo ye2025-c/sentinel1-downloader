@@ -6,6 +6,8 @@ data/
 
 # 打包产物
 SentinelDownloader.exe
+SentinelDownloader.sha256.txt
+release_notes.txt
 _build_env/
 build/
 dist/

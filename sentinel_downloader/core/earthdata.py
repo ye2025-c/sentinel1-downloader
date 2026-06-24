@@ -198,8 +198,11 @@ def download_one(session, url, save_dir, log_cb=None, prog_cb=None,
                             if speed_cb: speed_cb(win_bytes / elapsed)
                             win_bytes, win_start = 0, now
 
-                        if total and prog_cb:
-                            prog_cb(downloaded / total * 100)
+                        if prog_cb:
+                            # 多带 已下载/总大小（字节），供 UI 显示单文件大小。
+                            # 服务器未给 Content-Length 时 total=0、pct 记 0。
+                            pct = (downloaded / total * 100) if total else 0
+                            prog_cb(pct, downloaded, total)
 
             # 大小校验：服务器声明了大小但本地不足 → 视为不完整，触发重试
             final_size = os.path.getsize(tmp_path)

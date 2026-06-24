@@ -101,7 +101,7 @@ def build_nasa_tab(app):
     app.ntree.heading("status", text="状态")
     app.ntree.column("idx",    width=44,  anchor="center", stretch=False)
     app.ntree.column("name",   width=520, anchor="w")
-    app.ntree.column("status", width=110, anchor="center", stretch=False)
+    app.ntree.column("status", width=150, anchor="center", stretch=False)
     app.ntree.tag_configure("waiting",     foreground=C["DIS"])
     app.ntree.tag_configure("downloading", foreground=C["ACC"])
     app.ntree.tag_configure("done",        foreground=C["GRN"])
@@ -299,6 +299,9 @@ def render_list(app):
     for i, it in enumerate(app.nasa_items):
         status_txt = {"waiting": "等待中", "downloading": "下载中",
                       "done": "✅ 完成", "error": "❌ 失败"}.get(it["status"], it["status"])
+        # 完成的项追加显示文件大小（下载时记录），让用户直观看到单文件体积
+        if it["status"] == "done" and it.get("size"):
+            status_txt += f"  {it['size']}"
         app.ntree.insert("", "end", iid=str(i),
                          values=(i + 1, it["name"], status_txt),
                          tags=(it["status"],))
@@ -453,6 +456,10 @@ def _start(app):
                 if os.path.exists(out_p):
                     it["status"] = "done"
                     ok_cnt += 1
+                    try:
+                        it["size"] = f"{os.path.getsize(out_p)/1024**2:.1f} MB"
+                    except Exception:
+                        pass
                     _nlog(app, f"  ⏭ [{i}/{total}] 瘦身版已存在，跳过：{it['name']}", "ok")
                     app.after(0, lambda: render_list(app))
                     continue
@@ -461,8 +468,14 @@ def _start(app):
             app.after(0, lambda: render_list(app))
             _nlog(app, f"  ↓ [{i}/{total}] {it['name']}", "head")
 
-            def _prog(pct, idx=i, nm=it["name"]):
-                label = f"第 {idx}/{total} 个：{nm[:36]}  {pct:.0f}%"
+            def _prog(pct, dl=0, tot=0, idx=i, nm=it["name"]):
+                if tot:                                  # 已知总大小：当前/总 MB
+                    size_txt = f"  {dl/1024**2:.1f}/{tot/1024**2:.1f} MB"
+                elif dl:                                 # 服务器没给大小：仅显已下载
+                    size_txt = f"  已下载 {dl/1024**2:.1f} MB"
+                else:
+                    size_txt = ""
+                label = f"第 {idx}/{total} 个：{nm[:32]}  {pct:.0f}%{size_txt}"
                 app.after(0, lambda p=pct, lb=label: (
                     app.nasa_prog.config(value=p),
                     app.lbl_nasa_prog.config(text=lb, foreground=app.colors["ACC"])))
@@ -477,6 +490,12 @@ def _start(app):
             it["status"] = "done" if success else "error"
             if success:
                 ok_cnt += 1
+                # 记录下载文件大小（裁剪前的原始大小），在列表里持久显示
+                if save_path and os.path.exists(save_path):
+                    try:
+                        it["size"] = f"{os.path.getsize(save_path)/1024**2:.1f} MB"
+                    except Exception:
+                        pass
                 # 下载后裁剪（瘦身）——独立于下载内核，异常不影响下载结果
                 if proc_cfg.enabled and save_path and nc_available():
                     try:

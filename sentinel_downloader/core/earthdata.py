@@ -172,6 +172,10 @@ def download_one(session, url, save_dir, log_cb=None, prog_cb=None,
                     if log_cb: log_cb("  ✅ 已完成（续传校验）", "ok")
                     if speed_cb: speed_cb(0)
                     return True, save_path
+                elif existing and resp.status_code == 206:
+                    # 206 Partial Content = 服务器接受续传，从断点继续
+                    if log_cb:
+                        log_cb(f"  ↪ 断点续传：从 {existing/1024**2:.1f} MB 处继续下载", "info")
 
                 resp.raise_for_status()
 

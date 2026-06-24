@@ -47,7 +47,6 @@ class MapPanel(ttk.Frame):
         app.after(100, self._load_map)
 
     def _build_toolbar(self):
-        C  = self.app.colors
         tb = ttk.Frame(self)
         tb.pack(fill="x", padx=6, pady=(4, 2))
 
@@ -67,9 +66,8 @@ class MapPanel(ttk.Frame):
                    command=self._save_to_lib).pack(side="right", padx=(0, 6))
 
         self.status_var = tk.StringVar(value="点击「✏ 绘制矩形」在地图上框选范围")
-        tk.Label(tb, textvariable=self.status_var,
-                 fg=C["DIS"], font=(self.app.FONT_UI, 9),
-                 bg=C["BG"]).pack(side="left", padx=8)
+        ttk.Label(tb, textvariable=self.status_var, style="Dim.TLabel").pack(
+            side="left", padx=8)
 
     def _build_map_area(self):
         self.map_frame = ttk.Frame(self)
@@ -88,12 +86,10 @@ class MapPanel(ttk.Frame):
             self._has_map = True
         except Exception:
             self._has_map = False
-            tk.Label(
+            ttk.Label(
                 self.map_frame,
                 text="底图加载失败，请检查网络连接\n\n手动输入坐标或导入文件后\n点击「使用此 AOI」仍可正常使用",
-                fg=self.app.colors["DIS"],
-                font=(self.app.FONT_UI, 10),
-                bg=self.app.colors["BG"]
+                font=(self.app.FONT_UI, 10)
             ).pack(expand=True)
 
     # ── 绘制矩形 ──────────────────────────────────────────
@@ -278,8 +274,6 @@ class _MapWindow(tk.Toplevel):
 
     # ── 界面构建 ──────────────────────────────────────────
     def _build_ui(self):
-        C = self.app.colors
-
         # 工具栏
         tb = ttk.Frame(self)
         tb.pack(fill="x", padx=10, pady=(8, 4))
@@ -300,9 +294,8 @@ class _MapWindow(tk.Toplevel):
                    command=self._save_to_lib).pack(side="right", padx=(0, 6))
 
         self.status_var = tk.StringVar(value="点击「✏ 绘制矩形」在地图上框选范围")
-        tk.Label(tb, textvariable=self.status_var,
-                 fg=C["DIS"], font=(self.app.FONT_UI, 9),
-                 bg=C["BG"]).pack(side="left", padx=10)
+        ttk.Label(tb, textvariable=self.status_var, style="Dim.TLabel").pack(
+            side="left", padx=10)
 
         # 地图区
         self.map_frame = ttk.Frame(self)
@@ -322,12 +315,10 @@ class _MapWindow(tk.Toplevel):
             self._has_map = True
         except Exception:
             self._has_map = False
-            tk.Label(
+            ttk.Label(
                 self.map_frame,
                 text="底图加载失败，请检查网络连接\n\n手动输入坐标或导入文件后\n点击「使用此 AOI」仍可正常使用",
-                fg=self.app.colors["DIS"],
-                font=(self.app.FONT_UI, 11),
-                bg=self.app.colors["BG"]
+                font=(self.app.FONT_UI, 11)
             ).pack(expand=True)
 
     # ── 绘制矩形（两次点击）───────────────────────────────

@@ -8,7 +8,6 @@
 """
 
 import threading
-import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 
 from core.api import CopernicusAPI
@@ -30,8 +29,7 @@ def build_download_tab(app):
     # 队列工具栏
     qtb = ttk.Frame(qf)
     qtb.pack(fill="x", pady=(0, 6))
-    app.lbl_queue = tk.Label(qtb, text="队列：0 景  |  0.0 GB",
-                             fg=C["ACC"], font=(app.FONT_UI, 10, "bold"), bg=C["BG"])
+    app.lbl_queue = ttk.Label(qtb, text="队列：0 景  |  0.0 GB", style="Accent.TLabel")
     app.lbl_queue.pack(side="left")
     ttk.Button(qtb, text="清空队列", command=lambda: _clear_queue(app)).pack(side="right")
     ttk.Button(qtb, text="移除选中", command=lambda: _remove_selected(app)).pack(side="right", padx=4)
@@ -61,8 +59,7 @@ def build_download_tab(app):
     # 进度区
     pgf = ttk.Frame(f)
     pgf.pack(fill="x", padx=12, pady=(0, 6))
-    app.lbl_prog = tk.Label(pgf, text="当前进度：-", fg=C["DIS"],
-                            font=(app.FONT_UI, 9), bg=C["BG"])
+    app.lbl_prog = ttk.Label(pgf, text="当前进度：-", style="Dim.TLabel")
     app.lbl_prog.pack(anchor="w")
     app.prog_bar = ttk.Progressbar(pgf, mode="determinate", length=100)
     app.prog_bar.pack(fill="x", pady=(3, 0))
@@ -78,15 +75,14 @@ def build_download_tab(app):
     app.btn_stop.pack(side="left", padx=(0, 16))
 
     # 并行数选择
-    tk.Label(cbf, text="并行：", fg=C["DIS"], font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
+    ttk.Label(cbf, text="并行：", style="Dim.TLabel").pack(side="left")
     app.cmb_parallel = ttk.Combobox(cbf, values=["1", "2", "3", "4", "5"],
                                     state="readonly", width=3, font=(app.FONT_UI, 9))
     app.cmb_parallel.set(str(get_setting("parallel")))
     app.cmb_parallel.pack(side="left")
-    tk.Label(cbf, text=" 景", fg=C["DIS"], font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
+    ttk.Label(cbf, text=" 景", style="Dim.TLabel").pack(side="left")
 
-    app.lbl_speed = tk.Label(cbf, text="", fg=C["ORG"],
-                             font=(app.FONT_UI, 9), bg=C["BG"])
+    app.lbl_speed = ttk.Label(cbf, text="", style="Warn.TLabel")
     app.lbl_speed.pack(side="right")
 
     # 下载日志
@@ -109,8 +105,7 @@ def build_download_tab(app):
 
     htb = ttk.Frame(hf)
     htb.pack(fill="x", pady=(0, 6))
-    app.lbl_hist = tk.Label(htb, text="历史记录：0 条",
-                            fg=C["DIS"], font=(app.FONT_UI, 9), bg=C["BG"])
+    app.lbl_hist = ttk.Label(htb, text="历史记录：0 条", style="Dim.TLabel")
     app.lbl_hist.pack(side="left")
     ttk.Button(htb, text="清除历史",
                command=lambda: _clear_history(app)).pack(side="right")
@@ -266,7 +261,7 @@ def _start_download(app):
         # 初始化进度标签
         app.after(0, lambda: app.lbl_prog.config(
             text=f"准备下载，共 {total} 景...",
-            fg=app.colors["DIS"]
+            foreground=app.colors["DIS"]
         ))
         app.after(0, lambda: app.prog_bar.config(value=0))
 
@@ -300,7 +295,7 @@ def _start_download(app):
                          f"第 {slot_idx+1}/{total} 景：{short}  {pct:.0f}%")
                 app.after(0, lambda p=pct, lb=label: (
                     app.prog_bar.config(value=p),
-                    app.lbl_prog.config(text=lb, fg=app.colors["ACC"])
+                    app.lbl_prog.config(text=lb, foreground=app.colors["ACC"])
                 ))
 
             ok, _ = do_download(
@@ -329,7 +324,7 @@ def _start_download(app):
                 if slot_idx % n_workers == 0:
                     app.prog_bar.config(value=100)
                 app.lbl_prog.config(text=fl,
-                                    fg=app.colors["GRN"] if ok else app.colors["RED"])
+                                    foreground=app.colors["GRN"] if ok else app.colors["RED"])
 
             app.after(0, _on_one_done)
             app.after(0, lambda n=name, ok=ok:
@@ -341,7 +336,7 @@ def _start_download(app):
                 def _reset_bar():
                     app.prog_bar.config(value=0)
                     app.lbl_prog.config(text=f"等待下一景... ({done}/{total})",
-                                        fg=app.colors["DIS"])
+                                        foreground=app.colors["DIS"])
                 app.after(300, _reset_bar)
 
             return ok

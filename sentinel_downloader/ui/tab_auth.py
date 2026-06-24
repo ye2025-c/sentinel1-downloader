@@ -8,7 +8,6 @@
 """
 
 import threading
-import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 
 from core.config import save_config, load_config
@@ -26,17 +25,17 @@ def build_auth_tab(app):
     box.pack(fill="x", padx=18, pady=(18, 8))
 
     r = 0
-    tk.Label(box, text="邮箱：").grid(row=r, column=0, sticky="e", **pad)
+    ttk.Label(box, text="邮箱：").grid(row=r, column=0, sticky="e", **pad)
     app.ent_user = ttk.Entry(box, width=40)
     app.ent_user.grid(row=r, column=1, sticky="ew", **pad)
 
     r += 1
-    tk.Label(box, text="密码：").grid(row=r, column=0, sticky="e", **pad)
+    ttk.Label(box, text="密码：").grid(row=r, column=0, sticky="e", **pad)
     app.ent_pass = ttk.Entry(box, width=40, show="●")
     app.ent_pass.grid(row=r, column=1, sticky="ew", **pad)
 
     r += 1
-    tk.Label(box, text="保存路径：").grid(row=r, column=0, sticky="e", **pad)
+    ttk.Label(box, text="保存路径：").grid(row=r, column=0, sticky="e", **pad)
     pf = ttk.Frame(box)
     pf.grid(row=r, column=1, sticky="ew", **pad)
     app.ent_path = ttk.Entry(pf, width=32)
@@ -50,20 +49,20 @@ def build_auth_tab(app):
     edbox.pack(fill="x", padx=18, pady=(0, 8))
 
     er = 0
-    tk.Label(edbox, text="用户名：").grid(row=er, column=0, sticky="e", **pad)
+    ttk.Label(edbox, text="用户名：").grid(row=er, column=0, sticky="e", **pad)
     app.ent_eduser = ttk.Entry(edbox, width=40)
     app.ent_eduser.grid(row=er, column=1, sticky="ew", **pad)
 
     er += 1
-    tk.Label(edbox, text="密码：").grid(row=er, column=0, sticky="e", **pad)
+    ttk.Label(edbox, text="密码：").grid(row=er, column=0, sticky="e", **pad)
     app.ent_edpass = ttk.Entry(edbox, width=40, show="●")
     app.ent_edpass.grid(row=er, column=1, sticky="ew", **pad)
 
     er += 1
-    tk.Label(edbox,
+    ttk.Label(edbox,
              text="注册：urs.earthdata.nasa.gov（免费）；凭据在首次下载时校验，"
                   "若返回 HTML 登录页即为账号密码错误。",
-             fg=C["DIS"], font=(app.FONT_UI, 8), wraplength=520,
+             style="Hint.TLabel", wraplength=520,
              anchor="w", justify="left").grid(row=er, column=0, columnspan=2,
                                               sticky="ew", padx=16, pady=(0, 2))
     edbox.columnconfigure(1, weight=1)
@@ -94,14 +93,14 @@ def build_auth_tab(app):
         ]),
     ]
     for title, steps in groups:
-        tk.Label(hint, text=title, fg=C["ACC"], font=(app.FONT_UI, 9, "bold"),
+        ttk.Label(hint, text=title, foreground=C["ACC"], font=(app.FONT_UI, 9, "bold"),
                  anchor="w").pack(fill="x", pady=(4, 1))
         for s in steps:
-            tk.Label(hint, text="    " + s, fg=C["DIS"], font=(app.FONT_UI, 9),
+            ttk.Label(hint, text="    " + s, style="Dim.TLabel",
                      anchor="w").pack(fill="x", pady=1)
-    tk.Label(hint,
+    ttk.Label(hint,
              text="※ 两者均支持断点续传，中断后重开自动续传；建议全局 VPN 提升访问速度。",
-             fg=C["DIS"], font=(app.FONT_UI, 8), wraplength=560,
+             style="Hint.TLabel", wraplength=560,
              anchor="w", justify="left").pack(fill="x", pady=(6, 0))
 
     # 登录日志

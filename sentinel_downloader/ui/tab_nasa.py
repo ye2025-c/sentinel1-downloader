@@ -47,8 +47,7 @@ def build_nasa_tab(app):
     # URL 列表文件
     row1 = ttk.Frame(cfgbox)
     row1.pack(fill="x", pady=(0, 6))
-    tk.Label(row1, text="URL 列表(.txt)：", fg=C["FG"],
-             font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
+    ttk.Label(row1, text="URL 列表(.txt)：", font=(app.FONT_UI, 9)).pack(side="left")
     app.ent_nasa_txt = ttk.Entry(row1)
     app.ent_nasa_txt.pack(side="left", fill="x", expand=True, padx=(6, 6))
     ttk.Button(row1, text="浏览", width=6,
@@ -59,8 +58,7 @@ def build_nasa_tab(app):
     # 保存目录
     row2 = ttk.Frame(cfgbox)
     row2.pack(fill="x", pady=(0, 6))
-    tk.Label(row2, text="保存目录：    ", fg=C["FG"],
-             font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
+    ttk.Label(row2, text="保存目录：    ", font=(app.FONT_UI, 9)).pack(side="left")
     app.ent_nasa_path = ttk.Entry(row2)
     app.ent_nasa_path.pack(side="left", fill="x", expand=True, padx=(6, 6))
     ttk.Button(row2, text="浏览", width=6,
@@ -69,15 +67,13 @@ def build_nasa_tab(app):
     # 礼貌间隔
     row3 = ttk.Frame(cfgbox)
     row3.pack(fill="x")
-    tk.Label(row3, text="文件间隔：", fg=C["DIS"],
-             font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
+    ttk.Label(row3, text="文件间隔：", style="Dim.TLabel").pack(side="left")
     app.cmb_nasa_delay = ttk.Combobox(row3, values=["0", "1", "2", "3", "5"],
                                       state="readonly", width=3,
                                       font=(app.FONT_UI, 9))
     app.cmb_nasa_delay.set(str(get_setting("nasa_delay")))
     app.cmb_nasa_delay.pack(side="left")
-    tk.Label(row3, text=" 秒（避免请求过密）", fg=C["DIS"],
-             font=(app.FONT_UI, 9), bg=C["BG"]).pack(side="left")
+    ttk.Label(row3, text=" 秒（避免请求过密）", style="Dim.TLabel").pack(side="left")
 
     # ── 下载后裁剪（按研究区瘦身）─────────────────────────
     # 注意：减小的是「本地占用」，不是网络下载流量——直连文件按 HTTP 整文件
@@ -90,8 +86,7 @@ def build_nasa_tab(app):
 
     ltb = ttk.Frame(lf)
     ltb.pack(fill="x", pady=(0, 6))
-    app.lbl_nasa_count = tk.Label(ltb, text="待下载：0 个",
-                                  fg=C["ACC"], font=(app.FONT_UI, 10, "bold"), bg=C["BG"])
+    app.lbl_nasa_count = ttk.Label(ltb, text="待下载：0 个", style="Accent.TLabel")
     app.lbl_nasa_count.pack(side="left")
     ttk.Button(ltb, text="清空", command=lambda: _clear_list(app)).pack(side="right")
     ttk.Button(ltb, text="删除所选", command=lambda: _delete_selected(app)).pack(
@@ -122,8 +117,7 @@ def build_nasa_tab(app):
     # ── 进度区 ────────────────────────────────────────────
     pgf = ttk.Frame(f)
     pgf.pack(fill="x", padx=12, pady=(0, 6))
-    app.lbl_nasa_prog = tk.Label(pgf, text="当前进度：-", fg=C["DIS"],
-                                 font=(app.FONT_UI, 9), bg=C["BG"])
+    app.lbl_nasa_prog = ttk.Label(pgf, text="当前进度：-", style="Dim.TLabel")
     app.lbl_nasa_prog.pack(anchor="w")
     app.nasa_prog = ttk.Progressbar(pgf, mode="determinate", length=100)
     app.nasa_prog.pack(fill="x", pady=(3, 0))
@@ -137,8 +131,7 @@ def build_nasa_tab(app):
     app.btn_nasa_stop = ttk.Button(cbf, text="⏹  停止", state="disabled",
                                    command=lambda: _stop(app))
     app.btn_nasa_stop.pack(side="left")
-    app.lbl_nasa_speed = tk.Label(cbf, text="", fg=C["ORG"],
-                                  font=(app.FONT_UI, 9), bg=C["BG"])
+    app.lbl_nasa_speed = ttk.Label(cbf, text="", style="Warn.TLabel")
     app.lbl_nasa_speed.pack(side="right")
 
     # ── 下载日志 ──────────────────────────────────────────
@@ -184,8 +177,7 @@ def _build_crop_panel(app, f, C):
     r1.pack(fill="x", pady=(0, 6))
 
     def _coord(parent, label, var):
-        tk.Label(parent, text=label, fg=C["FG"], font=(app.FONT_UI, 9),
-                 bg=C["BG"]).pack(side="left")
+        ttk.Label(parent, text=label, font=(app.FONT_UI, 9)).pack(side="left")
         ttk.Entry(parent, textvariable=var, width=7).pack(side="left", padx=(2, 10))
 
     _coord(r1, "南纬", app.var_crop_s)
@@ -193,8 +185,7 @@ def _build_crop_panel(app, f, C):
     _coord(r1, "西经", app.var_crop_w)
     _coord(r1, "东经", app.var_crop_e)
 
-    tk.Label(r1, text="从AOI填入：", fg=C["DIS"], font=(app.FONT_UI, 9),
-             bg=C["BG"]).pack(side="left", padx=(8, 0))
+    ttk.Label(r1, text="从AOI填入：", style="Dim.TLabel").pack(side="left", padx=(8, 0))
     names = [it["name"] for it in AoiManager.get_display_list()]
     app.cmb_crop_aoi = ttk.Combobox(r1, values=names, state="readonly",
                                     width=14, font=(app.FONT_UI, 9))
@@ -207,8 +198,8 @@ def _build_crop_panel(app, f, C):
     ttk.Checkbutton(r2, text="裁剪成功后删除原始大文件（仅保留瘦身版）",
                     variable=app.var_crop_del).pack(side="left")
     if not nc_available():
-        tk.Label(r2, text="  ⚠ 未安装 netCDF4/h5py，裁剪将自动跳过（不影响下载）",
-                 fg=C["ORG"], font=(app.FONT_UI, 8), bg=C["BG"]).pack(side="left")
+        ttk.Label(r2, text="  ⚠ 未安装 netCDF4/h5py，裁剪将自动跳过（不影响下载）",
+                 foreground=C["ORG"], font=(app.FONT_UI, 8)).pack(side="left")
 
 
 def _fill_bbox_from_aoi(app):
@@ -439,7 +430,7 @@ def _start(app):
                            f"经[{b['lon_min']:g},{b['lon_max']:g}]"
                            f"{'，裁剪后删原始' if proc_cfg.delete_original else ''}", "info")
         app.after(0, lambda: app.lbl_nasa_prog.config(
-            text=f"准备下载，共 {total} 个...", fg=app.colors["DIS"]))
+            text=f"准备下载，共 {total} 个...", foreground=app.colors["DIS"]))
         app.after(0, lambda: app.nasa_prog.config(value=0))
 
         # 预认证：先访问 Earthdata Login 拿初始 Cookies
@@ -474,7 +465,7 @@ def _start(app):
                 label = f"第 {idx}/{total} 个：{nm[:36]}  {pct:.0f}%"
                 app.after(0, lambda p=pct, lb=label: (
                     app.nasa_prog.config(value=p),
-                    app.lbl_nasa_prog.config(text=lb, fg=app.colors["ACC"])))
+                    app.lbl_nasa_prog.config(text=lb, foreground=app.colors["ACC"])))
 
             success, save_path = download_one(
                 session, it["url"], save_dir,
@@ -500,7 +491,7 @@ def _start(app):
             app.after(0, lambda d=done, ic=icon, nm=it["name"], s=success:
                       app.lbl_nasa_prog.config(
                           text=f"{ic} 第 {d}/{total} 个：{nm[:30]}",
-                          fg=app.colors["GRN"] if s else app.colors["RED"]))
+                          foreground=app.colors["GRN"] if s else app.colors["RED"]))
 
             if app._nasa_stop.is_set():
                 break
@@ -523,7 +514,7 @@ def _finish(app, ok_cnt, total, aborted=False):
         app.nasa_prog.config(value=0)
         app.lbl_nasa_prog.config(
             text=f"{head}！成功 {ok_cnt}/{total} 个",
-            fg=app.colors["DIS"])
+            foreground=app.colors["DIS"])
         app.lbl_nasa_speed.config(text="")
         app.btn_nasa_start.config(state="normal")
         app.btn_nasa_stop.config(state="disabled")

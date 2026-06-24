@@ -32,19 +32,18 @@ def build_aoi_section(app, parent):
     list_frame.pack(fill="x", pady=(0, 6))
 
     scrollbar = ttk.Scrollbar(list_frame, orient="vertical")
-    app.aoi_listbox = tk.Listbox(
+    app.aoi_tree = ttk.Treeview(
         list_frame,
+        show="tree",
         height=5,
-        bg=C["BG2"], fg=C["FG"],
-        selectbackground=C["SEL"], selectforeground=C["FG"],
-        activestyle="none",
-        relief="flat",
-        font=(app.FONT_UI, 9),
+        selectmode="browse",
         yscrollcommand=scrollbar.set,
-        exportselection=False,
     )
-    scrollbar.config(command=app.aoi_listbox.yview)
-    app.aoi_listbox.pack(side="left", fill="x", expand=True)
+    app.aoi_tree.column("#0", width=260, stretch=True)
+    app.aoi_tree.tag_configure("builtin", foreground=C["DIS"])
+    app.aoi_tree.tag_configure("custom",  foreground=C["FG"])
+    scrollbar.config(command=app.aoi_tree.yview)
+    app.aoi_tree.pack(side="left", fill="x", expand=True)
     scrollbar.pack(side="right", fill="y")
 
     # ── 按钮行 ────────────────────────────────────────────
@@ -65,8 +64,7 @@ def build_aoi_section(app, parent):
                command=lambda: _delete_aoi(app)).pack(side="left")
 
     # ── WKT 文本框 ────────────────────────────────────────
-    tk.Label(abox, text="WKT：", fg=C["DIS"],
-             font=(app.FONT_UI, 8), bg=C["BG"]).pack(anchor="w")
+    ttk.Label(abox, text="WKT：", style="Hint.TLabel").pack(anchor="w")
     app.ent_wkt = tk.Text(
         abox, height=3,
         bg=C["BG2"], fg=C["FG"],
@@ -77,17 +75,16 @@ def build_aoi_section(app, parent):
     app.ent_wkt.pack(fill="x", pady=(2, 0))
 
     # ── 当前 AOI 提示标签 ─────────────────────────────────
-    app.lbl_aoi_hint = tk.Label(
-        abox, text="", fg=C["ACC"],
-        font=(app.FONT_UI, 8), bg=C["BG"], anchor="w", wraplength=260
+    app.lbl_aoi_hint = ttk.Label(
+        abox, text="", foreground=C["ACC"],
+        font=(app.FONT_UI, 8), anchor="w", wraplength=260
     )
     app.lbl_aoi_hint.pack(fill="x", pady=(4, 0))
 
     dep_text = ("GeoJSON/KML 可用；Shapefile 可用"
                 if AoiManager.has_gdal()
                 else "GeoJSON/KML 可用；Shapefile 需要 GDAL（标准版 exe 会跳过）")
-    tk.Label(abox, text=dep_text, fg=C["DIS"],
-             font=(app.FONT_UI, 8), bg=C["BG"], anchor="w", wraplength=260).pack(
+    ttk.Label(abox, text=dep_text, style="Hint.TLabel", anchor="w", wraplength=260).pack(
         fill="x", pady=(4, 0))
 
     # ── 内部状态 ──────────────────────────────────────────
@@ -100,7 +97,7 @@ def build_aoi_section(app, parent):
     app.aoi_panel_refresh = _refresh
 
     # ── 绑定选中事件 ──────────────────────────────────────
-    app.aoi_listbox.bind("<<ListboxSelect>>", lambda e: _on_select(app))
+    app.aoi_tree.bind("<<TreeviewSelect>>", lambda e: _on_select(app))
 
     # 初始加载
     _reload_list(app)
@@ -109,26 +106,22 @@ def build_aoi_section(app, parent):
 # ── 内部操作 ──────────────────────────────────────────────
 def _reload_list(app):
     """重新加载 AOI 列表（内置预设 + 用户自定义）。"""
-    app.aoi_listbox.delete(0, "end")
+    for iid in app.aoi_tree.get_children():
+        app.aoi_tree.delete(iid)
     app._aoi_items = AoiManager.get_display_list()
-    for item in app._aoi_items:
-        prefix = "  " if item.get("builtin") else "★ "
-        app.aoi_listbox.insert("end", prefix + item["name"])
-
-    # 内置条目用不同颜色区分
     for i, item in enumerate(app._aoi_items):
-        if item.get("builtin"):
-            app.aoi_listbox.itemconfig(i, fg=app.colors["DIS"])
-        else:
-            app.aoi_listbox.itemconfig(i, fg=app.colors["FG"])
+        prefix = "  " if item.get("builtin") else "★ "
+        tag = "builtin" if item.get("builtin") else "custom"
+        app.aoi_tree.insert("", "end", iid=str(i),
+                            text=prefix + item["name"], tags=(tag,))
 
 
 def _on_select(app):
     """列表选中时将 WKT 填入文本框，更新提示标签。"""
-    sel = app.aoi_listbox.curselection()
+    sel = app.aoi_tree.selection()
     if not sel:
         return
-    idx  = sel[0]
+    idx = int(sel[0])
     if idx >= len(app._aoi_items):
         return
     item = app._aoi_items[idx]
@@ -186,11 +179,11 @@ def _import_file(app):
     _reload_list(app)
 
     # 选中刚导入的条目（最后一条）
-    last = app.aoi_listbox.size() - 1
-    if last >= 0:
-        app.aoi_listbox.selection_clear(0, "end")
-        app.aoi_listbox.selection_set(last)
-        app.aoi_listbox.see(last)
+    children = app.aoi_tree.get_children()
+    if children:
+        last_iid = children[-1]
+        app.aoi_tree.selection_set(last_iid)
+        app.aoi_tree.see(last_iid)
         _on_select(app)
 
     messagebox.showinfo("✅ 导入成功", f"已导入并保存：{name.strip()}")
@@ -220,11 +213,11 @@ def _save_current_wkt(app):
 
 
 def _rename_aoi(app):
-    sel = app.aoi_listbox.curselection()
+    sel = app.aoi_tree.selection()
     if not sel:
         messagebox.showinfo("提示", "请先选择一个 AOI")
         return
-    item = app._aoi_items[sel[0]]
+    item = app._aoi_items[int(sel[0])]
     if item.get("builtin"):
         messagebox.showinfo("提示", "内置预设不可重命名")
         return
@@ -237,11 +230,11 @@ def _rename_aoi(app):
 
 
 def _delete_aoi(app):
-    sel = app.aoi_listbox.curselection()
+    sel = app.aoi_tree.selection()
     if not sel:
         messagebox.showinfo("提示", "请先选择一个 AOI")
         return
-    item = app._aoi_items[sel[0]]
+    item = app._aoi_items[int(sel[0])]
     if item.get("builtin"):
         messagebox.showinfo("提示", "内置预设不可删除")
         return

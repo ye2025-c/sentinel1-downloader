@@ -51,13 +51,27 @@ class App(ttkb.Window):
         self.minsize(980, 660)
         self.resizable(True, True)
 
-        # 窗口图标：exe 打包后从捆绑资源加载；开发模式跳过（不影响运行）
+        # 按实际屏幕 DPI 同步 Tk 缩放（配合 main.py 的进程级 DPI 声明，
+        # 避免高分屏下控件/字体被系统拉伸糊掉）
+        try:
+            self.tk.call('tk', 'scaling', self.winfo_fpixels('1i') / 72.0)
+        except Exception:
+            pass
+
+        # 窗口图标：exe 打包后从捆绑资源加载；开发模式下读取仓库内静态资源
         try:
             import sys as _sys, os as _os
+            _ico = None
             if getattr(_sys, 'frozen', False):
-                _ico = _os.path.join(_sys._MEIPASS, "_icon.ico")
-                if _os.path.exists(_ico):
-                    self.iconbitmap(default=_ico)
+                _cand = _os.path.join(_sys._MEIPASS, "_icon.ico")
+                if _os.path.exists(_cand):
+                    _ico = _cand
+            if _ico is None:
+                _cand = _os.path.join(_os.path.dirname(__file__), "assets", "icon.ico")
+                if _os.path.exists(_cand):
+                    _ico = _cand
+            if _ico:
+                self.iconbitmap(default=_ico)
         except Exception:
             pass
 
@@ -141,6 +155,13 @@ class App(ttkb.Window):
         # 进度条加粗 + 绿色变体
         style.configure("TProgressbar", thickness=14)
         style.configure("Green.Horizontal.TProgressbar", background=GRN, thickness=14)
+
+        # ④ 统一的标签样式（替代各 Tab 里散落手写 fg=/bg= 的 tk.Label）
+        style.configure("Dim.TLabel",    font=(UI, 9),          foreground=DIS)
+        style.configure("Hint.TLabel",   font=(UI, 8),          foreground=DIS)
+        style.configure("Accent.TLabel", font=(UI, 10, "bold"), foreground=ACC)
+        style.configure("Warn.TLabel",   font=(UI, 9),          foreground=ORG)
+        style.configure("Sub.TLabel",    font=(UI, 8, "bold"),  foreground=DIS)
 
         # tk（非 ttk）控件无法走 style：用 option 数据库给未显式着色的
         # Label / Radiobutton 设默认深色底，并把下拉框弹窗也调成深色。

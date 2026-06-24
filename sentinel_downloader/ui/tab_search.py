@@ -76,11 +76,8 @@ def build_search_tab(app):
     ds_row = ttk.Frame(dsbox)
     ds_row.pack(anchor="w")
     for ds_val, ds_label in [("S1", "Sentinel-1（SAR）"), ("S2", "Sentinel-2（光学）")]:
-        tk.Radiobutton(
+        ttk.Radiobutton(
             ds_row, text=ds_label, variable=app.datasource_var, value=ds_val,
-            bg=C["BG"], fg=C["FG"], selectcolor=C["BG2"],
-            activebackground=C["BG"], activeforeground=C["ACC"],
-            font=(app.FONT_UI, 9),
             command=lambda: _switch_datasource(app)
         ).pack(side="left", padx=(0, 16))
 
@@ -89,11 +86,11 @@ def build_search_tab(app):
     tbox.pack(fill="x", pady=(0, 8))
     tf = ttk.Frame(tbox)
     tf.pack(fill="x")
-    tk.Label(tf, text="从：", width=4).pack(side="left")
+    ttk.Label(tf, text="从：", width=4).pack(side="left")
     app.ent_from = ttk.Entry(tf, width=13)
     app.ent_from.insert(0, "2025-07-20")
     app.ent_from.pack(side="left")
-    tk.Label(tf, text=" 至：").pack(side="left")
+    ttk.Label(tf, text=" 至：").pack(side="left")
     app.ent_to = ttk.Entry(tf, width=13)
     app.ent_to.insert(0, "2025-08-31")
     app.ent_to.pack(side="left")
@@ -109,13 +106,14 @@ def build_search_tab(app):
     app.pbox_s1 = ttk.LabelFrame(params_container, text=" 产品参数 (S1) ", padding=10)
     app.pbox_s1.pack(fill="x")   # 默认显示
 
-    tk.Label(app.pbox_s1, text="产品类型：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Label(app.pbox_s1, text="基本信息", style="Sub.TLabel").pack(anchor="w", pady=(0, 2))
+    ttk.Label(app.pbox_s1, text="产品类型：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_type = ttk.Combobox(app.pbox_s1, values=list(PRODUCT_TYPES.keys()),
                                 state="readonly", font=(app.FONT_UI, 9))
     app.cmb_type.current(0)
     app.cmb_type.pack(fill="x", pady=(2, 8))
 
-    tk.Label(app.pbox_s1, text="卫星平台：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Label(app.pbox_s1, text="卫星平台：", font=(app.FONT_UI, 9)).pack(anchor="w")
     pf2 = ttk.Frame(app.pbox_s1)
     pf2.pack(anchor="w", pady=(2, 8))
     app.var_s1a = tk.BooleanVar(value=True)
@@ -125,14 +123,16 @@ def build_search_tab(app):
     ttk.Checkbutton(pf2, text="S1B", variable=app.var_s1b).pack(side="left", padx=(0, 8))
     ttk.Checkbutton(pf2, text="S1C", variable=app.var_s1c).pack(side="left")
 
-    tk.Label(app.pbox_s1, text="轨道方向：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Separator(app.pbox_s1, orient="horizontal").pack(fill="x", pady=(2, 8))
+    ttk.Label(app.pbox_s1, text="轨道与模式", style="Sub.TLabel").pack(anchor="w", pady=(0, 2))
+    ttk.Label(app.pbox_s1, text="轨道方向：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_orbit = ttk.Combobox(
         app.pbox_s1, values=["不限", "升轨 ASCENDING", "降轨 DESCENDING"],
         state="readonly", font=(app.FONT_UI, 9))
     app.cmb_orbit.current(0)
     app.cmb_orbit.pack(fill="x", pady=(2, 8))
 
-    tk.Label(app.pbox_s1, text="极化方式：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Label(app.pbox_s1, text="极化方式：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_pol = ttk.Combobox(
         app.pbox_s1,
         values=["不限", "VV&VH（双极化）", "VV（单极化）",
@@ -141,11 +141,11 @@ def build_search_tab(app):
     app.cmb_pol.current(0)
     app.cmb_pol.pack(fill="x", pady=(2, 8))
 
-    tk.Label(app.pbox_s1, text="相对轨道号（留空=不限）：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Label(app.pbox_s1, text="相对轨道号（留空=不限）：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.ent_orbit_num = ttk.Entry(app.pbox_s1, width=10, font=(app.FONT_UI, 9))
     app.ent_orbit_num.pack(anchor="w", pady=(2, 8))
 
-    tk.Label(app.pbox_s1, text="成像模式：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Label(app.pbox_s1, text="成像模式：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_mode = ttk.Combobox(
         app.pbox_s1,
         values=["不限", "IW（干涉宽幅，推荐）", "EW（超宽幅）", "SM（条带）", "WV（波浪）"],
@@ -153,16 +153,18 @@ def build_search_tab(app):
     app.cmb_mode.current(0)
     app.cmb_mode.pack(fill="x", pady=(2, 8))
 
-    tk.Label(app.pbox_s1, text="绝对轨道号（逗号分隔，留空=不限）：",
+    ttk.Label(app.pbox_s1, text="绝对轨道号（逗号分隔，留空=不限）：",
              font=(app.FONT_UI, 9)).pack(anchor="w")
     app.ent_abs_orbit = ttk.Entry(app.pbox_s1, width=20, font=(app.FONT_UI, 9))
     app.ent_abs_orbit.pack(anchor="w", pady=(2, 8))
 
+    ttk.Separator(app.pbox_s1, orient="horizontal").pack(fill="x", pady=(2, 8))
+    ttk.Label(app.pbox_s1, text="检索控制", style="Sub.TLabel").pack(anchor="w", pady=(0, 2))
     app.var_online = tk.BooleanVar(value=True)
     ttk.Checkbutton(app.pbox_s1, text="仅显示在线产品（跳过归档）",
                     variable=app.var_online).pack(anchor="w", pady=(0, 8))
 
-    tk.Label(app.pbox_s1, text="最大返回数：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Label(app.pbox_s1, text="最大返回数：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_max = ttk.Combobox(app.pbox_s1, values=["20", "50", "100", "200"],
                                state="readonly", width=8, font=(app.FONT_UI, 9))
     app.cmb_max.set("50")
@@ -172,20 +174,21 @@ def build_search_tab(app):
     app.pbox_s2 = ttk.LabelFrame(params_container, text=" 产品参数 (S2) ", padding=10)
     # 不 pack，切换数据源时才显示
 
-    tk.Label(app.pbox_s2, text="处理级别：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Label(app.pbox_s2, text="基本信息", style="Sub.TLabel").pack(anchor="w", pady=(0, 2))
+    ttk.Label(app.pbox_s2, text="处理级别：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_s2_level = ttk.Combobox(app.pbox_s2, values=list(S2_PRODUCT_TYPES.keys()),
                                     state="readonly", font=(app.FONT_UI, 9))
     app.cmb_s2_level.current(0)
     app.cmb_s2_level.pack(fill="x", pady=(2, 8))
 
-    tk.Label(app.pbox_s2, text="最大云量 (%)：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Label(app.pbox_s2, text="最大云量 (%)：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_s2_cloud = ttk.Combobox(
         app.pbox_s2, values=["不限", "10", "20", "30", "50", "80"],
         state="readonly", font=(app.FONT_UI, 9), width=8)
     app.cmb_s2_cloud.set("30")
     app.cmb_s2_cloud.pack(anchor="w", pady=(2, 8))
 
-    tk.Label(app.pbox_s2, text="卫星平台：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Label(app.pbox_s2, text="卫星平台：", font=(app.FONT_UI, 9)).pack(anchor="w")
     pf_s2 = ttk.Frame(app.pbox_s2)
     pf_s2.pack(anchor="w", pady=(2, 8))
     app.var_s2a = tk.BooleanVar(value=True)
@@ -195,26 +198,30 @@ def build_search_tab(app):
     ttk.Checkbutton(pf_s2, text="S2B", variable=app.var_s2b).pack(side="left", padx=(0, 8))
     ttk.Checkbutton(pf_s2, text="S2C", variable=app.var_s2c).pack(side="left")
 
-    tk.Label(app.pbox_s2, text="Tile ID（如 T50TML，留空=不限）：",
+    ttk.Separator(app.pbox_s2, orient="horizontal").pack(fill="x", pady=(2, 8))
+    ttk.Label(app.pbox_s2, text="定位与版本", style="Sub.TLabel").pack(anchor="w", pady=(0, 2))
+    ttk.Label(app.pbox_s2, text="Tile ID（如 T50TML，留空=不限）：",
              font=(app.FONT_UI, 9)).pack(anchor="w")
     app.ent_s2_tile = ttk.Entry(app.pbox_s2, width=12, font=(app.FONT_UI, 9))
     app.ent_s2_tile.pack(anchor="w", pady=(2, 8))
 
-    tk.Label(app.pbox_s2, text="相对轨道号（留空=不限）：",
+    ttk.Label(app.pbox_s2, text="相对轨道号（留空=不限）：",
              font=(app.FONT_UI, 9)).pack(anchor="w")
     app.ent_s2_orbit = ttk.Entry(app.pbox_s2, width=10, font=(app.FONT_UI, 9))
     app.ent_s2_orbit.pack(anchor="w", pady=(2, 8))
 
-    tk.Label(app.pbox_s2, text="处理基线（如 05.00，留空=不限）：",
+    ttk.Label(app.pbox_s2, text="处理基线（如 05.00，留空=不限）：",
              font=(app.FONT_UI, 9)).pack(anchor="w")
     app.ent_s2_baseline = ttk.Entry(app.pbox_s2, width=10, font=(app.FONT_UI, 9))
     app.ent_s2_baseline.pack(anchor="w", pady=(2, 8))
 
+    ttk.Separator(app.pbox_s2, orient="horizontal").pack(fill="x", pady=(2, 8))
+    ttk.Label(app.pbox_s2, text="检索控制", style="Sub.TLabel").pack(anchor="w", pady=(0, 2))
     app.var_s2_online = tk.BooleanVar(value=True)
     ttk.Checkbutton(app.pbox_s2, text="仅显示在线产品（跳过归档）",
                     variable=app.var_s2_online).pack(anchor="w", pady=(0, 8))
 
-    tk.Label(app.pbox_s2, text="最大返回数：", font=(app.FONT_UI, 9)).pack(anchor="w")
+    ttk.Label(app.pbox_s2, text="最大返回数：", font=(app.FONT_UI, 9)).pack(anchor="w")
     app.cmb_s2_max = ttk.Combobox(app.pbox_s2, values=["20", "50", "100", "200"],
                                   state="readonly", width=8, font=(app.FONT_UI, 9))
     app.cmb_s2_max.set("50")
@@ -248,9 +255,8 @@ def build_search_tab(app):
     nsf = ttk.LabelFrame(result_frame, text=" 📋 按产品名搜索（官网复制粘贴）", padding=8)
     nsf.pack(fill="x", pady=(0, 8))
 
-    tk.Label(nsf,
-             text="支持多个名称（换行或逗号分隔），带不带 .SAFE 均可",
-             fg=C["DIS"], font=(app.FONT_UI, 8), bg=C["BG"]).pack(anchor="w")
+    ttk.Label(nsf, text="支持多个名称（换行或逗号分隔），带不带 .SAFE 均可",
+             style="Hint.TLabel").pack(anchor="w")
 
     ns_row = ttk.Frame(nsf)
     ns_row.pack(fill="x", pady=(4, 0))
@@ -275,8 +281,7 @@ def build_search_tab(app):
     # 结果工具栏
     rtb = ttk.Frame(result_frame)
     rtb.pack(fill="x", pady=(0, 6))
-    app.lbl_count = tk.Label(rtb, text="搜索结果：0 景", fg=C["ACC"],
-                             font=(app.FONT_UI, 10, "bold"), bg=C["BG"])
+    app.lbl_count = ttk.Label(rtb, text="搜索结果：0 景", style="Accent.TLabel")
     app.lbl_count.pack(side="left")
     ttk.Button(rtb, text="全选", command=lambda: _select_all(app)).pack(side="right", padx=4)
     ttk.Button(rtb, text="全不选", command=lambda: _deselect_all(app)).pack(side="right", padx=4)
@@ -288,13 +293,12 @@ def build_search_tab(app):
     # 客户端高级筛选：对已检索结果实时子串过滤，不重新请求服务器
     ftb = ttk.Frame(result_frame)
     ftb.pack(fill="x", pady=(4, 8))
-    tk.Label(ftb, text="🔎 筛选：", fg=C["DIS"], font=(app.FONT_UI, 9),
-             bg=C["BG"]).pack(side="left")
+    ttk.Label(ftb, text="🔎 筛选：", style="Dim.TLabel").pack(side="left")
     app.filter_var = tk.StringVar()
     ttk.Entry(ftb, textvariable=app.filter_var, font=(app.FONT_UI, 9)
               ).pack(side="left", fill="x", expand=True)
-    tk.Label(ftb, text=" 名称/平台/模式/极化/轨道", fg=C["DIS"],
-             font=(app.FONT_UI, 8), bg=C["BG"]).pack(side="left", padx=(6, 0))
+    ttk.Label(ftb, text=" 名称/平台/模式/极化/轨道", style="Hint.TLabel").pack(
+        side="left", padx=(6, 0))
     ttk.Button(ftb, text="清除",
                command=lambda: app.filter_var.set("")).pack(side="right", padx=4)
     # 输入即过滤（结果已在内存，纯客户端，无网络请求）
@@ -309,7 +313,7 @@ def build_search_tab(app):
 
     app.tree = ttk.Treeview(tree_frame, columns=cols, show="headings",
                             selectmode="extended")
-    app.tree.heading("sel",       text="✓")
+    app.tree.heading("sel",       text="☑")
     app.tree.heading("name",      text="产品名称")
     app.tree.heading("date",      text="感测时间 (UTC)")
     app.tree.heading("platform",  text="平台")
@@ -346,8 +350,7 @@ def build_search_tab(app):
     app.tree.pack(side="left", fill="both", expand=True)
 
     # 统计面板（表格下方一行）
-    app.lbl_stats = tk.Label(result_frame, text="", fg=C["DIS"],
-                             font=(app.FONT_UI, 9), bg=C["BG"], anchor="w")
+    app.lbl_stats = ttk.Label(result_frame, text="", style="Dim.TLabel", anchor="w")
     app.lbl_stats.pack(fill="x", pady=(4, 0))
 
     app._selected_iids = set()   # 已勾选行
@@ -365,22 +368,22 @@ def _tree_click(app, event):
     if col == "#1":
         if iid in app._selected_iids:
             app._selected_iids.discard(iid)
-            app.tree.set(iid, "sel", "")
+            app.tree.set(iid, "sel", "☐")
         else:
             app._selected_iids.add(iid)
-            app.tree.set(iid, "sel", "✓")
+            app.tree.set(iid, "sel", "☑")
 
 
 def _select_all(app):
     for iid in app.tree.get_children():
         app._selected_iids.add(iid)
-        app.tree.set(iid, "sel", "✓")
+        app.tree.set(iid, "sel", "☑")
 
 
 def _deselect_all(app):
     for iid in app.tree.get_children():
         app._selected_iids.discard(iid)
-        app.tree.set(iid, "sel", "")
+        app.tree.set(iid, "sel", "☐")
 
 
 def _switch_datasource(app):
@@ -668,7 +671,7 @@ def render_results(app, from_cache=False):
         tag     = "even" if i % 2 == 0 else "odd"
 
         app.tree.insert("", "end", iid=str(i),
-                        values=("", p.name, p.acquisition_time + " UTC",
+                        values=("☐", p.name, p.acquisition_time + " UTC",
                                 p.platform, p.mode, p.polarization,
                                 p.orbit_direction, p.relative_orbit, p.absolute_orbit,
                                 f"{p.size_gb:.1f}GB", p.cloud_cover_str,

@@ -40,6 +40,13 @@ def _handle_exception(exc_type, exc, tb):
     sys.__excepthook__(exc_type, exc, tb)
 
 if __name__ == "__main__":
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            ctypes.windll.shcore.SetProcessDpiAwareness(1)
+        except Exception:
+            pass
+
     sys.excepthook = _handle_exception
     app = App()
     app.report_callback_exception = _handle_exception

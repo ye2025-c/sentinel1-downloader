@@ -21,7 +21,6 @@ from core.config import get_settings, save_settings, _DEFAULT_SETTINGS
 
 def build_settings_tab(app):
     """在 app.tab_settings 上构建设置界面，绑定保存 / 恢复默认事件。"""
-    C = app.colors
     f = app.tab_settings
     cur = get_settings()
 
@@ -40,12 +39,12 @@ def build_settings_tab(app):
     pad = dict(padx=14, pady=6)
 
     def _row(parent, r, label, widget, hint=""):
-        tk.Label(parent, text=label, fg=C["FG"], font=(app.FONT_UI, 9),
-                 bg=C["BG"]).grid(row=r, column=0, sticky="e", **pad)
+        ttk.Label(parent, text=label, font=(app.FONT_UI, 9)).grid(
+            row=r, column=0, sticky="e", **pad)
         widget.grid(row=r, column=1, sticky="w", **pad)
         if hint:
-            tk.Label(parent, text=hint, fg=C["DIS"], font=(app.FONT_UI, 8),
-                     bg=C["BG"]).grid(row=r, column=2, sticky="w", padx=(0, 8))
+            ttk.Label(parent, text=hint, style="Hint.TLabel").grid(
+                row=r, column=2, sticky="w", padx=(0, 8))
         parent.columnconfigure(2, weight=1)
 
     # ── 下载设置 ──────────────────────────────────────────
@@ -99,9 +98,8 @@ def build_settings_tab(app):
     ttk.Button(bf, text="↺  恢复默认",
                command=lambda: _restore_defaults(app)).pack(side="left")
 
-    tk.Label(f, text="※ 设置下次操作时生效（并行数 / NASA 间隔保存后立即同步到对应下拉框）。",
-             fg=C["DIS"], font=(app.FONT_UI, 8), bg=C["BG"],
-             anchor="w").pack(fill="x", padx=20, pady=(2, 0))
+    ttk.Label(f, text="※ 设置下次操作时生效（并行数 / NASA 间隔保存后立即同步到对应下拉框）。",
+             style="Hint.TLabel", anchor="w").pack(fill="x", padx=20, pady=(2, 0))
 
 
 # ─────────────────────────────────────────────

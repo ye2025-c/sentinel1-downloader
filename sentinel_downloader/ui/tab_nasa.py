@@ -25,6 +25,7 @@ from core.earthdata import (
     preauth, download_one,
 )
 from core.aoi_manager import AoiManager
+from core.store import NasaHistoryStore
 from core.nc_processor import (
     ProcessConfig, crop_file, is_available as nc_available, output_path_for,
 )
@@ -147,6 +148,41 @@ def build_nasa_tab(app):
     app.nasa_log.tag_config("warn", foreground=C["ORG"])
     app.nasa_log.tag_config("info", foreground=C["ACC"])
     app.nasa_log.tag_config("head", foreground=C["FG"], font=("Consolas", 9, "bold"))
+
+    # ── 下载历史（独立于 CDSE，落盘 nasa_history.json，重启可浏览）────
+    hf = ttk.LabelFrame(f, text=" 下载历史 ", padding=8)
+    hf.pack(fill="x", padx=12, pady=(0, 12))
+
+    htb = ttk.Frame(hf)
+    htb.pack(fill="x", pady=(0, 6))
+    app.lbl_nasa_hist = tk.Label(htb, text="历史记录：0 条",
+                                 fg=C["DIS"], font=(app.FONT_UI, 9), bg=C["BG"])
+    app.lbl_nasa_hist.pack(side="left")
+    ttk.Button(htb, text="清除历史",
+               command=lambda: _clear_nasa_history(app)).pack(side="right")
+    ttk.Button(htb, text="重新下载",
+               command=lambda: _redownload_nasa_hist(app)).pack(side="right", padx=(0, 6))
+
+    hcols = ("hname", "hsize", "hstatus", "htime")
+    app.nhtree = ttk.Treeview(hf, columns=hcols, show="headings",
+                              selectmode="browse", height=4)
+    app.nhtree.heading("hname",   text="文件名")
+    app.nhtree.heading("hsize",   text="大小")
+    app.nhtree.heading("hstatus", text="状态")
+    app.nhtree.heading("htime",   text="完成时间")
+    app.nhtree.column("hname",   width=440, anchor="w",      stretch=True)
+    app.nhtree.column("hsize",   width=80,  anchor="center", stretch=False)
+    app.nhtree.column("hstatus", width=110, anchor="center", stretch=False)
+    app.nhtree.column("htime",   width=150, anchor="center", stretch=False)
+    app.nhtree.tag_configure("completed", foreground=C["GRN"])
+    app.nhtree.tag_configure("failed",    foreground=C["RED"])
+
+    nhsb = ttk.Scrollbar(hf, orient="vertical", command=app.nhtree.yview)
+    app.nhtree.configure(yscrollcommand=nhsb.set)
+    app.nhtree.pack(side="left", fill="x", expand=True)
+    nhsb.pack(side="right", fill="y")
+
+    render_nasa_history(app)
 
 
 # ─────────────────────────────────────────────
@@ -357,6 +393,64 @@ def _retry_failed(app):
 
 
 # ─────────────────────────────────────────────
+#  下载历史（独立于 CDSE）
+# ─────────────────────────────────────────────
+def render_nasa_history(app):
+    """刷新 NASA 下载历史面板（从 nasa_history.json 读取，最新在前）。"""
+    for iid in app.nhtree.get_children():
+        app.nhtree.delete(iid)
+    records = NasaHistoryStore.get_all()
+    for i, r in enumerate(records):
+        status_txt = {"completed": "✅ 完成", "failed": "❌ 失败"}.get(
+            r.get("status", ""), r.get("status", ""))
+        if r.get("cropped"):
+            status_txt += " ✂"          # 已裁剪瘦身标记
+        finished = (r.get("finished_at") or "").replace("T", " ")
+        app.nhtree.insert("", "end", iid=str(i),
+                          values=(r.get("name", ""), r.get("size", ""),
+                                  status_txt, finished),
+                          tags=(r.get("status", ""),))
+    app.lbl_nasa_hist.config(text=f"历史记录：{len(records)} 条")
+
+
+def _clear_nasa_history(app):
+    if messagebox.askyesno("确认", "确定清除所有 NASA 下载历史？"):
+        NasaHistoryStore.clear()
+        render_nasa_history(app)
+
+
+def _redownload_nasa_hist(app):
+    """把选中历史记录的 URL 重新加入下载列表（复用续传：已下完的会被跳过）。"""
+    if app.nasa_downloading:
+        messagebox.showinfo("提示", "正在下载中，请等本轮结束后再操作")
+        return
+    sel = app.nhtree.selection()
+    if not sel:
+        messagebox.showinfo("提示", "请先在历史列表中选中一条记录")
+        return
+    idx     = int(sel[0])
+    records = NasaHistoryStore.get_all()
+    if idx >= len(records):
+        return
+    r   = records[idx]
+    url = r.get("url")
+    if not url:
+        messagebox.showinfo("提示", "该记录缺少 URL，无法重新下载")
+        return
+    existing = next((it for it in app.nasa_items if it["url"] == url), None)
+    if existing:
+        existing["status"] = "waiting"
+    else:
+        app.nasa_items.append({
+            "url":    url,
+            "name":   r.get("name") or filename_from_url(url),
+            "status": "waiting",
+        })
+    render_list(app)
+    messagebox.showinfo("✅", "已加入下载列表，点击「▶ 开始下载」即可重新下载")
+
+
+# ─────────────────────────────────────────────
 #  下载调度（串行 + 礼貌间隔）
 # ─────────────────────────────────────────────
 def _start(app):
@@ -460,8 +554,11 @@ def _start(app):
                         it["size"] = f"{os.path.getsize(out_p)/1024**2:.1f} MB"
                     except Exception:
                         pass
+                    NasaHistoryStore.add(it["url"], it["name"], "completed",
+                                         it.get("size", ""), save_dir, cropped=True)
                     _nlog(app, f"  ⏭ [{i}/{total}] 瘦身版已存在，跳过：{it['name']}", "ok")
                     app.after(0, lambda: render_list(app))
+                    app.after(0, lambda: render_nasa_history(app))
                     continue
 
             it["status"] = "downloading"
@@ -488,6 +585,7 @@ def _start(app):
                 stop_event=app._nasa_stop,
             )
             it["status"] = "done" if success else "error"
+            cropped = False
             if success:
                 ok_cnt += 1
                 # 记录下载文件大小（裁剪前的原始大小），在列表里持久显示
@@ -499,11 +597,17 @@ def _start(app):
                 # 下载后裁剪（瘦身）——独立于下载内核，异常不影响下载结果
                 if proc_cfg.enabled and save_path and nc_available():
                     try:
-                        crop_file(save_path, proc_cfg,
-                                  log_cb=lambda m, t="info": _nlog(app, m, t))
+                        cstatus, _ = crop_file(save_path, proc_cfg,
+                                               log_cb=lambda m, t="info": _nlog(app, m, t))
+                        cropped = (cstatus == "cropped")
                     except Exception as e:
                         _nlog(app, f"  ⚠️ 裁剪异常（已跳过，原始保留）：{e}", "warn")
+            # 记入 NASA 下载历史（成功 / 失败都留痕，重启后可浏览）
+            NasaHistoryStore.add(it["url"], it["name"],
+                                 "completed" if success else "failed",
+                                 it.get("size", ""), save_dir, cropped=cropped)
             app.after(0, lambda: render_list(app))
+            app.after(0, lambda: render_nasa_history(app))
 
             done = sum(1 for x in pending if x["status"] in ("done", "error"))
             icon = "✅" if success else "❌"

@@ -3,7 +3,7 @@
 """Application identity shared by the GUI and build script."""
 
 APP_NAME = "Sentinel Downloader"
-APP_VERSION = "4.5.1"
+APP_VERSION = "4.6.0"
 
 
 def display_name() -> str:

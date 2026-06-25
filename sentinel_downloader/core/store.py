@@ -3,7 +3,8 @@
 """
 下载历史 / 搜索缓存 / 下载队列（JSON 存储，无外部依赖）
 ────────────────────────────────────────────────────────
-HistoryStore : 下载历史，记录每景的下载结果（data/download_history.json）
+HistoryStore : CDSE 下载历史，记录每景的下载结果（data/download_history.json）
+NasaHistoryStore : NASA Earthdata 下载历史，独立存储（data/nasa_history.json）
 SearchCache  : 搜索结果缓存，TTL 由设置项 cache_ttl_hours 决定（data/search_cache.json）
 QueueStore   : 下载队列持久化，重启后可恢复未完成任务（data/queue.json，V4.1 引入）
 
@@ -23,6 +24,7 @@ from threading import Lock
 from core.config import DATA_DIR, get_setting
 
 _HISTORY_FILE      = Path(DATA_DIR) / "download_history.json"
+_NASA_HISTORY_FILE = Path(DATA_DIR) / "nasa_history.json"
 _SEARCH_CACHE_FILE = Path(DATA_DIR) / "search_cache.json"
 _QUEUE_FILE        = Path(DATA_DIR) / "queue.json"
 
@@ -111,6 +113,72 @@ class HistoryStore:
     @classmethod
     def clear(cls):
         """清空所有历史记录。"""
+        with cls._lock:
+            cls._save({"version": "1.0", "records": []})
+
+
+# ─────────────────────────────────────────────────────────
+#  NASA 下载历史（独立于 CDSE）
+# ─────────────────────────────────────────────────────────
+class NasaHistoryStore:
+    """NASA Earthdata 下载历史 JSON 存储，线程安全。
+
+    与 CDSE 的 HistoryStore 分开维护——NASA 内核独立、字段不同：以 URL 为
+    主键（无 product_id / footprint），多记一个"是否已裁剪"。每条对应一个
+    文件，同一 URL 重新下载覆盖旧记录。落盘到 data/nasa_history.json，
+    重启后仍可浏览。
+    """
+    _lock = Lock()
+
+    @classmethod
+    def _load(cls) -> dict:
+        if not _NASA_HISTORY_FILE.exists():
+            return {"version": "1.0", "records": []}
+        try:
+            return json.loads(_NASA_HISTORY_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            return {"version": "1.0", "records": []}
+
+    @classmethod
+    def _save(cls, data: dict):
+        try:
+            _NASA_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _NASA_HISTORY_FILE.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8")
+        except Exception:
+            pass
+
+    @classmethod
+    def add(cls, url: str, name: str, status: str, size_str: str = "",
+            save_dir: str = "", cropped: bool = False):
+        """新增/覆盖一条 NASA 下载记录。status 为 completed / failed。"""
+        record = {
+            "url":         url,
+            "name":        name,
+            "size":        size_str,
+            "save_dir":    save_dir,
+            "cropped":     bool(cropped),
+            "status":      status,
+            "finished_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        with cls._lock:
+            data = cls._load()
+            data["records"] = [r for r in data["records"] if r.get("url") != url]
+            data["records"].append(record)
+            cls._save(data)
+
+    @classmethod
+    def get_all(cls) -> list:
+        """返回所有记录，最新在前。"""
+        try:
+            return list(reversed(cls._load()["records"]))
+        except Exception:
+            return []
+
+    @classmethod
+    def clear(cls):
+        """清空所有 NASA 下载历史。"""
         with cls._lock:
             cls._save({"version": "1.0", "records": []})
 

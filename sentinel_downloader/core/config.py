@@ -148,6 +148,43 @@ def get_setting(key: str):
         return _DEFAULT_SETTINGS.get(key)
 
 
+# ── ETA / 存储空间估算工具（V4.7）─────────────────────────────────
+def parse_size_to_bytes(s: str) -> int:
+    """'1.2 GB' → 1288490188; '850 MB' → 891289600"""
+    try:
+        num, unit = s.strip().split()
+        n = float(num)
+        if unit.upper() == "GB":
+            return int(n * 1024 ** 3)
+        if unit.upper() == "MB":
+            return int(n * 1024 ** 2)
+        return 0
+    except Exception:
+        return 0
+
+
+def format_eta(seconds: float) -> str:
+    """125 → '2m5s'; 3660 → '1h1m'; 45 → '45s'; <5 → ''"""
+    if seconds < 5:
+        return ""
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h:
+        return f"{h}h{m}m"
+    if m:
+        return f"{m}m{s}s"
+    return f"{s}s"
+
+
+def format_bytes(b: int) -> str:
+    """1288490188 → '1.2 GB'; 891289600 → '850 MB'"""
+    if b >= 1024 ** 3:
+        return f"{b / 1024 ** 3:.1f} GB"
+    if b >= 1024 ** 2:
+        return f"{b / 1024 ** 2:.0f} MB"
+    return f"{b / 1024:.0f} KB"
+
+
 def get_settings() -> dict:
     """返回完整设置字典（默认值 + 用户覆盖）。供设置页填充。"""
     try:

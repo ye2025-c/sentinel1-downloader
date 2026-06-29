@@ -19,6 +19,7 @@ from tkinter import ttk, filedialog, messagebox, scrolledtext
 
 from core.config import (
     log_line, save_config, get_setting, get_nasa_proc, save_nasa_proc,
+    parse_size_to_bytes, format_eta, format_bytes,
 )
 from core.earthdata import (
     EarthdataSession, parse_url_list, filename_from_url,
@@ -90,6 +91,7 @@ def build_nasa_tab(app):
     app.lbl_nasa_count = ttk.Label(ltb, text="待下载：0 个", style="Accent.TLabel")
     app.lbl_nasa_count.pack(side="left")
     ttk.Button(ltb, text="清空", command=lambda: _clear_list(app)).pack(side="right")
+    ttk.Button(ltb, text="扫描大小", command=lambda: _scan_sizes(app)).pack(side="right", padx=(0, 6))
     ttk.Button(ltb, text="删除所选", command=lambda: _delete_selected(app)).pack(
         side="right", padx=(0, 6))
     ttk.Button(ltb, text="↻ 重试失败", command=lambda: _retry_failed(app)).pack(
@@ -327,6 +329,57 @@ def _parse_txt(app):
     _nlog(app, f"已解析 {len(urls)} 个 URL：{os.path.basename(path)}", "head")
 
 
+def _scan_sizes(app):
+    """对列表中未扫描大小的项发送 HEAD 请求获取 Content-Length。
+
+    运行在后台线程，期间按钮禁用。失败静默（_tot 保持 0），不阻塞下载。
+    """
+    if app.nasa_downloading:
+        messagebox.showwarning("提示", "下载中，请先停止再扫描")
+        return
+    pending = [it for it in app.nasa_items if it.get("_tot", 0) == 0]
+    if not pending:
+        messagebox.showinfo("提示", "所有文件大小已获取")
+        return
+
+    # 找到扫描按钮并禁用
+    for child in app.ntree.master.winfo_children():
+        if isinstance(child, ttk.Frame):
+            for btn in child.winfo_children():
+                if isinstance(btn, ttk.Button) and btn.cget("text") == "扫描大小":
+                    scan_btn = btn
+                    break
+            else:
+                continue
+            break
+    else:
+        scan_btn = None
+
+    if scan_btn:
+        scan_btn.config(text="扫描中…", state="disabled")
+
+    def _run():
+        import requests
+        session = requests.Session()
+        session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+        ok = 0
+        for it in pending:
+            try:
+                r = session.head(it["url"], allow_redirects=True, timeout=15)
+                cl = int(r.headers.get("Content-Length", 0))
+                if cl > 0:
+                    it["_tot"] = cl
+                    ok += 1
+            except Exception:
+                pass
+        _nlog(app, f"扫描完成：{ok}/{len(pending)} 个文件获取到大小", "info")
+        app.after(0, lambda: render_list(app))
+        if scan_btn:
+            app.after(0, lambda: scan_btn.config(text="扫描大小", state="normal"))
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def render_list(app):
     """刷新文件列表 Treeview。"""
     for iid in app.ntree.get_children():
@@ -344,8 +397,10 @@ def render_list(app):
         if it["status"] != "done":
             waiting += 1
     done = sum(1 for it in app.nasa_items if it["status"] == "done")
+    scanned_bytes = sum(it.get("_tot", 0) for it in app.nasa_items)
+    size_hint = f"  |  约需 {format_bytes(scanned_bytes)}" if scanned_bytes else ""
     app.lbl_nasa_count.config(
-        text=f"共 {len(app.nasa_items)} 个  |  待下载 {waiting}  |  已完成 {done}")
+        text=f"共 {len(app.nasa_items)} 个  |  待下载 {waiting}  |  已完成 {done}{size_hint}")
 
 
 def _clear_list(app):
@@ -502,13 +557,25 @@ def _start(app):
     delay = int(app.cmb_nasa_delay.get())
 
     def _speed_cb(bps):
+        # 计算 ETA：当前文件剩余 + 后续文件预估大小
+        remaining = 0
+        cur_tot = it.get("_tot", 0)
+        cur_dl  = it.get("_dl", 0)
+        if cur_tot > cur_dl:
+            remaining += (cur_tot - cur_dl)
+        for later in pending[i:]:
+            remaining += later.get("_tot", 0)
+        eta_text = ""
+        if bps > 0 and remaining > 0:
+            eta_text = f"  |  剩余 {format_eta(remaining / bps)}"
+
         def _do():
             if bps <= 0:
                 app.lbl_nasa_speed.config(text="")
             elif bps >= 1024 * 1024:
-                app.lbl_nasa_speed.config(text=f"⚡ {bps/1024/1024:.1f} MB/s")
+                app.lbl_nasa_speed.config(text=f"⚡ {bps/1024/1024:.1f} MB/s{eta_text}")
             else:
-                app.lbl_nasa_speed.config(text=f"⚡ {bps/1024:.0f} KB/s")
+                app.lbl_nasa_speed.config(text=f"⚡ {bps/1024:.0f} KB/s{eta_text}")
         app.after(0, _do)
 
     def _run():
@@ -566,6 +633,8 @@ def _start(app):
             _nlog(app, f"  ↓ [{i}/{total}] {it['name']}", "head")
 
             def _prog(pct, dl=0, tot=0, idx=i, nm=it["name"]):
+                it["_dl"]  = dl          # 记录精确下载量，供 ETA 计算
+                it["_tot"] = tot
                 if tot:                                  # 已知总大小：当前/总 MB
                     size_txt = f"  {dl/1024**2:.1f}/{tot/1024**2:.1f} MB"
                 elif dl:                                 # 服务器没给大小：仅显已下载

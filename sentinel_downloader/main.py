@@ -14,6 +14,22 @@ import traceback
 from datetime import datetime
 from tkinter import messagebox
 
+# ─── 编码修复：避免依赖库启动子进程时 GBK 解码崩溃 ─────
+import subprocess as _subprocess
+_orig_init = _subprocess.Popen.__init__
+
+
+def _patched_init(self, args, **kwargs):
+    # 文本模式下默认用 UTF-8 + replace，避免 GBK 撞到非法字节
+    if kwargs.get("text") or kwargs.get("universal_newlines"):
+        kwargs.setdefault("encoding", "utf-8")
+        kwargs.setdefault("errors", "replace")
+    _orig_init(self, args, **kwargs)
+
+
+_subprocess.Popen.__init__ = _patched_init
+# ─── 编码修复结束 ─────────────────────────────────────
+
 from core.config import LOG_DIR, _ensure_data_dirs
 from ui.app import App
 

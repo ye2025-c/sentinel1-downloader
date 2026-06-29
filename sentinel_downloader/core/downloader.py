@@ -155,7 +155,7 @@ def download(api, product_id, product_name, save_dir,
                             speed_cb(speed_bps)
 
                     if total and prog_cb:
-                        prog_cb(downloaded / total * 100)
+                        prog_cb(downloaded / total * 100, downloaded, total)
 
             # ── 完整性校验：服务器声明了大小却没下满 → 判不完整、续传重试 ──
             final_size = os.path.getsize(save_path)

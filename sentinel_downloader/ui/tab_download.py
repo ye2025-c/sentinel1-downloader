@@ -15,6 +15,7 @@ from core.config import get_setting
 from core.downloader import download as do_download
 from core.store import HistoryStore
 from core.aoi_manager import AoiManager
+from core.config import parse_size_to_bytes, format_eta
 
 
 def build_download_tab(app):
@@ -232,12 +233,25 @@ def _start_download(app):
     def _update_total_speed():
         with app._slot_lock:
             total_bps = sum(app._slot_speeds)
+        # 计算队列剩余字节，用于 ETA 估算
+        remaining = 0
+        for q in app.queue:
+            if q["status"] == "waiting":
+                remaining += parse_size_to_bytes(q.get("size", "0 GB"))
+            elif q["status"] == "downloading":
+                tot = q.get("_tot", 0)
+                dl  = q.get("_dl", 0)
+                if tot > dl:
+                    remaining += (tot - dl)
+        eta_text = ""
+        if total_bps > 0 and remaining > 0:
+            eta_text = f"  |  剩余 {format_eta(remaining / total_bps)}"
         if total_bps <= 0:
             app.lbl_speed.config(text="")
         elif total_bps >= 1024 * 1024:
-            app.lbl_speed.config(text=f"⚡ {total_bps/1024/1024:.1f} MB/s")
+            app.lbl_speed.config(text=f"⚡ {total_bps/1024/1024:.1f} MB/s{eta_text}")
         else:
-            app.lbl_speed.config(text=f"⚡ {total_bps/1024:.0f} KB/s")
+            app.lbl_speed.config(text=f"⚡ {total_bps/1024:.0f} KB/s{eta_text}")
 
     def _make_speed_cb(slot_idx):
         def _speed(bps):
@@ -285,7 +299,10 @@ def _start_download(app):
             app._persist_queue()                # 状态变更 → 持久化（崩溃后可恢复）
             app.after(0, lambda: render_queue(app))
 
-            def _prog(pct):
+            def _prog(pct, dl=0, tot=0):
+                # 记录精确下载量，供 ETA 计算
+                q["_dl"]  = dl
+                q["_tot"] = tot
                 # 只让 slot_idx == 0 的 worker 更新进度条，避免多线程互相覆盖
                 if slot_idx % n_workers != 0:
                     return
